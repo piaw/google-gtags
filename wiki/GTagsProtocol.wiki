@@ -91,7 +91,7 @@ If _callers_ is `nil`, then only lines containing tag definitions are searched; 
 
 The server may (for any of these commands) optionally return `error-tagsfile-not-loaded` if it determines that it has not loaded the tags file corresponding to `language` and `callers`.
 
----+++ Miscellaneous
+==Miscellaneous==
 
 {{{
 (ping *required-attributes*)
@@ -117,7 +117,6 @@ Retrieves the server version number. The ==return-value== is an integer specifyi
 (get-supported-protocol-versions *required-attributes*)
 }}}
 _return-value_ is a list of the protocol versions that the server can support, e.g. _(1 2)_.
-
 
 
 

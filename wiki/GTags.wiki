@@ -18,12 +18,12 @@ We also provide a [GTagsPythonClient Python API].
 == More information about...==
    * GTagsServer
    * Clients (includeing how to set up your client)
-      * [GTagsEmacsClient GTagsEmacsClient]
-      * GTagsShellClient
-      * GTagsVIClient
-      * GTagsPythonClient
-   * The GTagsProtocol: how clients send messages along the wire to the server.
-   * The GTagsTagsFormat: how we represent tags information in files.
+     * [GTagsEmacsClient GTagsEmacsClient]
+     * [GTagsShellClient GTagsShellClient]
+     * [GTagsVIClient GTagsVIClient]
+     * [GTagsPythonClient GTagsPythonClient]
+   * The [GTagsProtocol GTagsProtocol]: how clients send messages along the wire to the server.
+   * The [GTagsTagsFormat GTagsTagsFormat]: how we represent tags information in files.
 
 ==Quick guide for Emacs==
 
@@ -78,7 +78,6 @@ you.
    `rtags.py`: callgraph indexing for java, python, c/c++
 
    `gentags.py`: create indexes for java, python, c/c++
-
 
 
 

@@ -1,4 +1,4 @@
-#labels Featured,GTags
+#labels Featured
 =Google Tags (GTags)=
 
 Google Tags is a project to speed up code browsing in large
@@ -79,7 +79,6 @@ you.
    `rtags.py`: callgraph indexing for java, python, c/c++
 
    `gentags.py`: create indexes for java, python, c/c++
-
 
 
 

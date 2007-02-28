@@ -18,7 +18,7 @@ We also provide a [GTagsPythonClient Python API].
 == More information about...==
    * GTagsServer
    * Clients (includeing how to set up your client)
-      * GTagsEmacsClient
+      * [GTagsEmacsClient GTagsEmacsClient]
       * GTagsShellClient
       * GTagsVIClient
       * GTagsPythonClient

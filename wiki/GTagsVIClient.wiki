@@ -1,0 +1,55 @@
+==GTags Client for VI==
+
+You can use GoogleTags from VI/Vim by adding the following line to
+your `.vimrc`:
+
+{{{
+source /path/to/gtags.vim
+}}}
+
+This adds three new commands to
+Vim: `:Gtjump`, `:Gtselect`
+and `:Gtag`. These are essentially analogues to
+the `:tjump`, `:tselect` and `:tag`
+commands.
+
+You can also bind keys to these commands. For example, to
+bind `ctrl-]` (the standard "jump to the definition of what's
+under my cursor" key) you can add the following to
+your `.vimrc`:
+
+{{{
+nmap <C-]> :call Gtag(expand('<cword>'))<CR>
+}}}
+
+<p>Note that these commands uses Vim's tag stack, so you can continue
+to use the standard Vim command `:pop` (or
+`ctrl-T`) to pop the tag stack.
+
+`gtags.vim` also adds a `:Gtgrep` command
+which searches over tag names and presents all occurrences in a
+`:grep` style vim window. Note that this isn't a full grep
+over the file contents. Rather, it only looks at the definitions of
+symbols (functions, classes, methods, etc.). Just like
+in `:grep`, the lines in this new window will include a
+"snippet" of the occurrence. You can jump to the actual occurrence by
+clicking or by pressing `enter` on a line.
+
+`gtags.vim` will attempt to use the file
+type of the current buffer to determine which one of these servers to
+communicate with. If nothing useful can be determined from the
+filetype, it will fall back to using the variable
+`g:google_tags_default_filetype`, which can be set to
+`'c++'`, `'java'`, or `'python'`.
+`'c++'` is the default value for this variable, but you can
+change it in your `.vimrc` like so:
+
+{{{
+let g:google_tags_default_filetype='java'
+}}}
+
+Finally, `gtags.vim` will also use your own local
+`tags` file, so you can generate tags yourself (using the
+command line tool `ctags`) for files you have open for
+add/edit, and the tags from your local `tags` file will be
+combined with the results from the GTAGS server.

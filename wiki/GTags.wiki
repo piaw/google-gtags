@@ -15,3 +15,72 @@ We provide an [GTagsEmacsClient Emacs client], a
 [GTagsShellClient command-line client], and a [GTagsVIClient VI client].
 We also provide a [GTagsPythonClient Python API].
 
+== More information about...==
+   * GTagsServer
+   * Clients (includeing how to set up your client)
+      * GTagsEmacsClient
+      * GTagsShellClient
+      * GTagsVIClient
+      * GTagsPythonClient
+   * The GTagsProtocol: how clients send messages along the wire to the server.
+   * The GTagsTagsFormat: how we represent tags information in files.
+
+==Quick guide for Emacs==
+
+For more detail (or for non-Emacs users), follow one of the Clients links above.
+
+First, load gtags.el. 
+   * `M-x google-show-tag-locations [RET] TAGNAME [RET]` searches for all tags definitions matching TAGNAME.
+   * `M-x google-show-tag-locations-regexp [RET] PREFIX [RET]` searches for all tag definitions beginning with PREFIX (which may be a regular expression).
+   * `M-x google-show-callers [RET] TAGNAME [RET]` searches for all tag calls matching TAGNAME.
+
+
+==How It Works==
+
+The `gentags` script
+(`gentags.py`) generate 6 tags files:`{cpp,java,python}{,.callers}.tags.gz`. We generate the files by running
+`etags` followed by `etags_to_tags.py`.
+
+The code for the server lives in `gtags.cc`.
+To build it, run ./configure; make. To run the GTags
+server:
+
+{{{$ gtags --tags_file ./cpp.tags --tags_port 2222}}}
+
+To save space and time, we support reading from gzipped tags files:
+
+{{{$ gtags --tags_file ./cpp.tags.gz --tags_port 2222 --gunzip}}}
+
+Different servers handle requests for different TAGS files;
+different port numbers correspond to different languages. Clients
+(like EMACS' `google-show-tag-locations`) must determine the
+appropriate server/port to send requests to.
+
+To prevent denial of service attacks, all commands return at most
+1000 results, so that if you have too many results the server won't be
+kept busy showing just results that are of interest to
+you.
+
+==List of Files==
+
+   `gtags.cc`: and friends: server (this is required)
+
+   `etags.el`: GNU Emacs etags implementation (comes with GNU Emacs, required for Xemacs)
+
+   `gtags.py`: python library to talk to the server
+
+   `gtags.sh`: shell implementation to talk to server
+
+   `gtags.vim`: vim client
+
+   `gtags_vim.py`: support for vim client
+
+   `rtags.py`: callgraph indexing for java, python, c/c++
+
+   `gentags.py`: create indexes for java, python, c/c++
+
+
+
+
+
+

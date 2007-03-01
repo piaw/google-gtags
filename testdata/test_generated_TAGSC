@@ -1,0 +1,21 @@
+(tags-format-version 2)
+(tags-comment "")
+(timestamp 1155246438)
+(tags-corpus-name "cppcallers")
+(file 
+  (path "tools/tags/file1.h")
+  (language "c++")
+  (contents ((item (line 10) (offset 100) (descriptor (call (to (ref (name "file_size"))))) (snippet "int file_size;"))
+             (item (line 15) (offset 200) (descriptor (call (to (ref (name "file_name"))))) (snippet "string file_name;")))))
+(file 
+  (path "tools/util/file2.h")
+  (language "c++")
+  (contents ((item (line 20) (offset 300) (descriptor (call (to (ref (name "file_name"))))) (snippet "string file_name;")))))
+(file 
+  (path "tools/cpp/file3.h")
+  (language "c++")
+  (contents ((item (line 25) (offset 400) (descriptor (call (to (ref (name "TagsReader"))))) (snippet "class TagsReader {")))))
+(file 
+  (path "tools/cpp/file4.h")
+  (language "c++")
+  (contents ((item (line 30) (offset 500) (descriptor (call (to (ref (name "BetterTagsReader"))))) (snippet "class BetterTagsReader : public Tagsreader {")))))

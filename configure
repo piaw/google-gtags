@@ -1,0 +1,48 @@
+#!/bin/sh
+
+SCONS="scons/scons.py"
+
+if [[ "$1" == "--help" ]]; then
+    $SCONS -Q configure --help
+fi
+
+# If scons is not present, unpack it
+if [ ! -e "scons/scons.py" ]; then
+    pushd scons > /dev/null
+    echo "Unpacking scons..."
+    tar xzvf scons-local.tar.gz > /dev/null
+    if [[ "$?" == 0 ]]; then
+	echo "Done"
+    else
+	echo "Failed"
+	exit 2
+    fi
+    popd > /dev/null
+fi
+
+echo "Producing Makefile."
+
+# Produce a Makefile
+cat > Makefile <<EOF
+
+SCONS=$SCONS
+
+all:
+	\$(SCONS) -Q
+
+clean:
+	\$(SCONS) -c gtags tests
+
+tests:
+	\$(SCONS) -Q tests
+
+runtests:
+	\$(SCONS) -Q runtests
+
+EOF
+
+echo "Done."
+echo "Run 'make' to build gtags."
+echo "Run 'make tests' to build unit tests."
+echo "Run 'make runtests' to run tests."
+echo "Run 'make clean' to clean build."

@@ -1,0 +1,13 @@
+
+tools/tags/file1.h,66
+int file_size;file_size10,100
+string file_name;file_name15,200
+
+tools/util/file2.h,37
+string file_name;file_name20,300
+
+tools/cpp/file3.h,37
+class TagsReader {TagsReader25,400
+
+tools/cpp/file4.h,69
+class BetterTagsReader : public Tagsreader {BetterTagsReader30,500

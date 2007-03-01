@@ -2,7 +2,7 @@
 
 == Build Requirement ==
    * Gcc (tested on 4.0 only)
-   * Python 1.5+
+   * Python 2.4
    * tar, gunzip
    * [http://www.boost.org/libs/test/doc/index.html Boost Test Library (only for building and running unit tests)]
 
@@ -37,5 +37,4 @@ $ make runtests
    # Load gtags.el and gtags.vim in emacs and python respectively.
 
 We recommend you repeat step 1 and 2 nightly. If you have gtags servers running, you can instruct them to load the new tags file by sending them `reload-tags-file` command. See GTagsProtocol for more details.
-
 

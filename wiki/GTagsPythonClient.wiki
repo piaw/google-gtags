@@ -1,3 +1,5 @@
+#summary GTags python client usage.
+
 ==GTags Python API==
 
 `gtags.py` contains Python bindings that talk to the

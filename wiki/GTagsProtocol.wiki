@@ -1,3 +1,4 @@
+#summary How GTags server and client talk to each other.
 ==The GTags Protocol, v2==
 
 This page describes the protocol used by the GoogleTags (GTags) server and client to talk to each other.

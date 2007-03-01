@@ -1,0 +1,56 @@
+#summary How to build and deploy GTags
+
+== Build Requirement ==
+   * Gcc (tested on 4.0 only)
+   * Python 1.5+
+   * tar, gunzip
+   * [http://www.boost.org/libs/test/doc/index.html Boost Test Library (only for building and running unit tests)]
+
+== Build Instruction ==
+To build GTags server, do
+{{{
+$ cd gtags-1.0
+$ ./configure
+$ make
+}}}
+
+To build unit tests, do
+{{{
+$ make tests
+}}}
+
+To run unit tests, do
+{{{
+$ make runtests
+}}}
+
+== Deployment Requirement ==
+   * Python 2.4
+   * [http://ctags.sourceforge.net/ Exuberant Ctags]
+   * You must run ctags executable as etags in order for it to generate tags file in etags format. To do this, simply create a symbolic link to ctags named etags.
+
+== Recommended Deployment ==
+   # Checkout complete source tree nightly from your repository.
+   # Invoke gentags with: {{{gentags.py --etags=/path/to/etags --rtags=/path/to/rtags.py --etags_to_tags=/path/to/etags_to_tags.py}}}
+   # For each generated {cpp|java|python}[{.callers}].tags.gz for, start a instance of gtags server.
+   # Edit gtags.el and gtags.py respectively so emacs and python clients know where the servers are.
+   # Load gtags.el and gtags.vim in emacs and python respectively.
+
+We recommend you repeat step 1 and 2 nightly. If you have gtags servers running, you can instruct them to load the new tags file by sending them `reload-tags-file` command. See GTagsProtocol for more details.
+
+
+
+
+
+
+
+= Details =
+
+Add your content here.  Format your content with:
+  * Text in *bold* or _italic_
+  * Headings, paragraphs, and lists
+  * Automatic links to other wiki pages
+
+
+
+

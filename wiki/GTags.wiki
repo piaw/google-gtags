@@ -20,7 +20,7 @@ We also provide a [GTagsPythonClient Python API].
 
 == More information about...==
    * [GTagsInstallation How to install and deploy]
-   * GTagsServer
+   * [GTagsServer GTagsServer]
    * Clients (includeing how to set up your client)
      * [GTagsEmacsClient GTagsEmacsClient]
      * [GTagsShellClient GTagsShellClient]

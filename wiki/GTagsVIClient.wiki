@@ -1,4 +1,6 @@
+#summary GTags VI client usage.
 #labels Phase-Design
+
 ==GTags Client for VI==
 
 You can use GoogleTags from VI/Vim by adding the following line to

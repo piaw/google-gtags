@@ -1,3 +1,5 @@
+#summary GTags shell client usage.
+
 ==Utility:  GTags on the command-line==
 
 Sitaram Iyer wrote a command-line script interface to gtags.  This is

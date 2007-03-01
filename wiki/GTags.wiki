@@ -19,6 +19,7 @@ We provide an [GTagsEmacsClient Emacs client], a
 We also provide a [GTagsPythonClient Python API].
 
 == More information about...==
+   * [GTagsInstallation How to install and deploy]
    * GTagsServer
    * Clients (includeing how to set up your client)
      * [GTagsEmacsClient GTagsEmacsClient]
@@ -81,6 +82,5 @@ you.
    `rtags.py`: callgraph indexing for java, python, c/c++
 
    `gentags.py`: create indexes for java, python, c/c++
-
 
 

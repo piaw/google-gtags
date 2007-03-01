@@ -39,18 +39,3 @@ $ make runtests
 We recommend you repeat step 1 and 2 nightly. If you have gtags servers running, you can instruct them to load the new tags file by sending them `reload-tags-file` command. See GTagsProtocol for more details.
 
 
-
-
-
-
-
-= Details =
-
-Add your content here.  Format your content with:
-  * Text in *bold* or _italic_
-  * Headings, paragraphs, and lists
-  * Automatic links to other wiki pages
-
-
-
-

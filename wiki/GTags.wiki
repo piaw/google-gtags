@@ -83,4 +83,3 @@ you.
 
    `gentags.py`: create indexes for java, python, c/c++
 
-

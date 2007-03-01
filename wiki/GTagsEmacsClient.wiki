@@ -1,3 +1,5 @@
+#summary GTags Emacs Client
+
 =GTags for Emacs=
 
 To use GTags, put the cursor over the identifier in question and type `M-x google-show-tag-locations [RET] [RET]`. (The search defaults to the identifier under point, but you can change it.) If there's only one place where the identifier is defined, then Emacs immediately jumps there. If there are multiple matches, then GTAGS will pop up a new window showing all matches (and the filename, and a snippet). Click on any of the items (or press `[RET]` with the cursor on its line) to jump to the definition.
@@ -128,5 +130,4 @@ To set the output format for Gtags, use one of these options:
 (setq google-tags-output-mode 'single-line-grouped)
 (setq google-tags-output-mode 'standard)
 }}}
-
 

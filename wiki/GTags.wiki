@@ -81,3 +81,14 @@ you.
    `rtags.py`: callgraph indexing for java, python, c/c++
 
    `gentags.py`: create indexes for java, python, c/c++
+
+==GTags is brought to you by...==
+Ken Ashcraft,
+Stephen Chen,
+Arthur Gleckler,
+Laurence Gonsalves,
+Leandro Groisman,
+Sitaram Iyer,
+Piaw Na,
+Arun Sharma,
+Phil Sung

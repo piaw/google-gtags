@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # Copyright 2004 Google Inc.
 # All Rights Reserved.
 #

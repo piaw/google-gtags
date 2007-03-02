@@ -27,7 +27,7 @@ interpreter embedded within vim (or gvim).
 """
 
 __author__ = "laurence@google.com (Laurence Gonsalves)"
-__version__ = """$Id: //depot/opensource/gtags/gtags_vim.py#5 $"""
+__version__ = """$Id: //depot/opensource/gtags/gtags_vim.py#6 $"""
 
 import vim
 import os
@@ -38,14 +38,12 @@ import socket
 sys.path.append(vim.eval('g:google_tags_pydir'))
 
 import gtags
-import gtags_google
 
 VIM_TO_GTAGS_TYPES = {
   'c' : 'c++',
   'cpp' : 'c++',
   'java' : 'java',
-  'python' : 'python',
-  'sawzall' : 'szl'
+  'python' : 'python'
 }
 
 def GetFiletype():
@@ -141,32 +139,12 @@ def SearchTagCallersSnippets(pattern):
                             [])
 
 def ResolveFilename(fnam):
-  # The client's google3 directory is assumed to be the top-most
-  # ancestor of the current directory named google3. If there is no
-  # ancestor of the current directory named google3, then we just use
-  # the current directory.
-  google3 = re.sub('/google3/.*', '/google3/', os.getcwd() + '/')
-
-  # Filenames supplied by the tags server are relative to google3. For
-  # each file, we first look for it under the client's google3
-  # directory, and then the various /home/build google3 directorys (in
-  # order of decreasing permission requirements).  The first one we can
-  # find is the file name that gets written to the output file.  If
-  # neither can be found, then the original relative file name is
-  # written.
-  path = [google3,
-          '/home/build/public/google3/',
-          '/home/build/nonconf/google3/',
-          '/home/build/google3/']
+  path = [os.getcwd() + '/']
 
   for dir in path:
     full_fnam = os.path.join(dir, fnam)
     if os.path.exists(full_fnam):
       return full_fnam
-  # could not find any existing file..
-  # if this is a proto file, then try resolving it as a protodevel too..
-  if fnam.endswith(".proto"):
-      return ResolveFilename(fnam+"devel")
 
   return fnam
 
@@ -178,11 +156,6 @@ def SaveTagFile(tags):
   for tag in tags:
     fnam = ResolveFilename(tag.filename_)
     print >> f, '%s\t%s\t%s' % (tag.tag_, fnam, tag.lineno_)
-
-# Backwards compatibility
-# TODO(leandrog): delete if no one uses this
-def WriteTagFile(name):
-  WriteTagFileExactMatch(name)
 
 # Methods:
 #    WriteTagFileExact, WriteTagFileRegExp, WriteTagFileExact_Callers,

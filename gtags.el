@@ -997,11 +997,11 @@ into a tag name"
   (let* ((filename (tagrecord-filename match))
          (actual-filename
           (expand-file-name
-           (concat (file-truename
+           (concat (directory-truename
                     (find-google-source-root default-directory))
                    filename))) ;; ()
          (default-filename (expand-file-name
-                            (concat (file-truename google-default-root)
+                            (concat (directory-truename google-default-root)
                                     filename))))
     (google-select-from-files (google-generate-potential-filenames
                                actual-filename
@@ -1518,10 +1518,10 @@ as seen from each individual caller."
          (etagrecord (cons snippet (cons lineno offset)))
          (actual-filename
           (expand-file-name
-           (concat (file-truename (find-google-source-root default-directory))
+           (concat (directory-truename (find-google-source-root default-directory))
                    filename)))
          (default-filename (expand-file-name
-                            (concat (file-truename google-default-root)
+                            (concat (directory-truename google-default-root)
                                     filename)))
          (selected-file (google-select-from-files
                          (google-generate-potential-filenames
@@ -1681,6 +1681,10 @@ as seen from each individual caller."
   (format "*%s: %s*"
           (or prefix "TAGS")
           about))
+
+(defun directory-truename (filename)
+  "Call file-truename on filename, then make sure it ends with a /."
+  (file-name-as-directory (file-truename filename)))
 
 ;;******************************************************************************
 ;; Emacs Modes

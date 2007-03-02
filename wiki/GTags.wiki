@@ -7,7 +7,7 @@ Google Tags is a project to speed up code browsing in large
 source code base. Here are some scenarios where it can help:
 
    * While you're browsing source code, Gtags can immediately jump to the definition of a function or variable.
-   * Gtags can grep over all definitions or function calls in Google source code.
+   * Gtags can grep over all definitions or function calls in your source code.
    * Gtags can tell you where all the callers of a particular function are.
 
 We do this by extending the TAGS functionality in GNU Emacs and
@@ -20,7 +20,7 @@ We also provide a [GTagsPythonClient Python API].
 
 == More information about...==
    * [GTagsInstallation How to install and deploy]
-   * Clients (includeing how to set up your client)
+   * Clients (including how to set up your client)
      * [GTagsEmacsClient GTagsEmacsClient]
      * [GTagsShellClient GTagsShellClient]
      * [GTagsVIClient GTagsVIClient]

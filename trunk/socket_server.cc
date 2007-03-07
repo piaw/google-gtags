@@ -82,15 +82,14 @@ class SocketIO : public IOInterface {
   bool Output(const char * output) {
     const char* outbuf = output;
     int towrite = strlen(output);
-    int written = 0;
 
-    while (written < towrite) {
+    while (towrite > 0) {
       int wrote = write(connected_socket_, outbuf, towrite);
       if (wrote <= 0 ) {
         break;
       }
-      written += wrote;
       outbuf += wrote;
+      towrite -= wrote;
     }
     return false;
   }

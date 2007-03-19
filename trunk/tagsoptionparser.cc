@@ -75,7 +75,6 @@ void PrintUsage() {
 //   -non_boolean_option value
 //   --non_boolean_option value
 void ParseArgs(int argc, char ** argv) {
-  cerr << boolean_options().size() << endl;
   int i = 1; //argv[0] is the command name
   char buf[256];
   while (i < argc) {

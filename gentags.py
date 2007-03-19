@@ -17,6 +17,7 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 
+import re
 import optparse
 import os
 
@@ -26,10 +27,11 @@ option_parser.add_option("--base_path",
                          dest="base_path",
                          default="",
                          help="Path to use for opening original source files.")
+
 option_parser.add_option("--etags",
-                    dest="etags",
-                    default="/usr/pubsw/bin/etags",
-                    help="Path to etags binary.")
+                         dest="etags",
+                         default="/usr/pubsw/bin/etags",
+                         help="Path to etags binary.")
 
 option_parser.add_option("--rtags",
                          dest="rtags",
@@ -50,46 +52,78 @@ etags_to_tags_commands = {
   "python.callers.tags" : [ "PTAGSC", "python", True ],
   }
 
+target_to_language = {
+  "TAGS"                 : "cpp",
+  "JTAGS"                : "java",
+  "PTAGS"                : "python",
+  "TAGSC"                : "cpp",
+  "JTAGSC"               : "java",
+  "PTAGSC"               : "python",
+  }
+
+extensions = {
+  "cpp"                 : re.compile("^.*\.(cc|c|h|lex)$"),
+  "java"                : re.compile("^.*\.(java)$"),
+  "python"              : re.compile("^.*\.(py)$"),
+  }
+
+file_list = {
+  "cpp"                 : [],
+  "java"                : [],
+  "python"              : [],
+  }
+
+def find_source_files(dirs):
+  for directory in dirs:
+    for path, dirs, files in os.walk(directory):
+      for filename in files:
+        for key in extensions.keys():
+          if extensions[key].match(filename):
+            file_list[key].append(os.path.join(path, filename))
+            break
+
 def main():
   (options, args) = option_parser.parse_args()
-  # TODO(stephenchen): investigate if this still applies with option_parser
-  # these commands have to be defined inside main so that FLAGS.etags will have
-  # the right value
+
+  print "Crawling source files."
+  find_source_files(["."])
+
   etags_commands = {
-    'TAGS' : r"find . -regex '.*\.\(cc\|c\|h\|lex\)' "
-             r"| xargs " + options.etags + " -o TAGS -a",
-    'JTAGS' : r"find . -regex '.*\.\(java\)' "
-              r"| xargs " + options.etags + " -o JTAGS -a",
-    'PTAGS' : r"find .  -regex '.*\.\(py\)' "
-              r"| xargs " + options.etags + " -o PTAGS -a",
-    'TAGSC' : r"find . -regex '.*\.\(cc\|c\|h\|lex\)' | "
-           r"xargs " + options.rtags + " --output=TAGSC "
-           r"--append",
-    'JTAGSC' : r"find . -regex '.*\.\(java\)' | "
-           r"xargs " + options.rtags + " --output=JTAGSC "
-           r"--append",
-    'PTAGSC' : r"find . -regex '.*\.\(py\)' | "
-           r"xargs " + options.rtags + " --output=PTAGSC "
-           r"--append",
+    'TAGS' : options.etags + " -o TAGS -a " + " ".join(file_list["cpp"]),
+    'JTAGS' : options.etags + " -o JTAGS -a " + " ".join(file_list["java"]),
+    'PTAGS' : options.etags + " -o PTAGS -a "  + " ".join(file_list["python"]),
+    'TAGSC' : options.rtags + " --output=TAGSC --append " +
+                              " ".join(file_list["cpp"]),
+    'JTAGSC' : options.rtags + " --output=JTAGSC --append " +
+                               " ".join(file_list["java"]),
+    'PTAGSC' : options.rtags + " --output=PTAGSC --append " +
+                               " ".join(file_list["python"]),
     }
 
-  for target in [ 'TAGS', 'JTAGS', 'PTAGS',
-                  'TAGSC' , 'JTAGSC' , 'PTAGSC' ]:
-    print 'generating tag file: ' + target
-    os.system('rm -f %s' % target)
-    result = os.system(etags_commands[target])
-    if result != 0:
-      print 'errors generating tag file for %s' % target
+  for target in etags_commands.keys():
+    if len(file_list[target_to_language[target]]) > 0:
+      print 'generating tag file: ' + target
+      os.system('rm -f %s' % target)
+      os.system(etags_commands[target])
+    else:
+      print 'No %s files found. Skipping %s generation.' \
+        % (target_to_language[target], target)
 
   for target in etags_to_tags_commands.keys():
     [ infile, language, callers ] = etags_to_tags_commands[target]
-    if callers:
-      callers_string = "--callers"
+    if len(file_list[target_to_language[infile]]) > 0:
+      if callers:
+        callers_string = "--callers"
+      else:
+        callers_string = "--nocallers"
+      print 'translating tag file: ' + target
+      os.system('rm -f %s' % target)
+      command = (options.etags_to_tags + " --language=%s %s --corpus_name=%s --input_file=%s --output_file=- --base_path=%s | gzip > %s.gz") % (language, callers_string, target, infile, options.base_path, target)
+      print command
+      os.popen(command)
     else:
-      callers_string = "--nocallers"
-    print 'translating tag file: ' + target
-    os.system('rm -f %s' % target)
-    os.popen((options.etags_to_tags + " --language=%s %s --corpus_name=%s --input_file=%s --output_file=- --base_path=%s | gzip > %s.gz") % (language, callers_string, target, infile, options.base_path, target))
+      print "No %s files found. Skipping %s translation." \
+          % (target_to_language[infile], target)
 
 if __name__ == '__main__':
   main()

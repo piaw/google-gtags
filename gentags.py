@@ -30,7 +30,7 @@ option_parser.add_option("--base_path",
 
 option_parser.add_option("--etags",
                          dest="etags",
-                         default="/usr/pubsw/bin/etags",
+                         default="/usr/bin/etags",
                          help="Path to etags binary.")
 
 option_parser.add_option("--rtags",

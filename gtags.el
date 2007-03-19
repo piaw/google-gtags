@@ -40,17 +40,17 @@
 ;; Basic Configuration
 
 (defvar google-gtags-language-hosts
-  '(("c++" . (("gtags.google.com" . 2223)))
-    ("java" . (("gtags.google.com" . 2224)))
-    ("python" . (("gtags.google.com" . 2225))))
+  '(("c++" . (("localhost" . 2223)))
+    ("java" . (("localhost" . 2223)))
+    ("python" . (("localhost" . 2223))))
   "Each language is paired with a list of hostname, port pairs. To set up 
 multiple GTags servers, add additional hostname, port pairs and set
 google-tags-multi-servers to true")
 
 (defvar google-gtags-call-graph-hosts
-  '(("c++" . (("gtags.google.com" . 2223)))
-    ("java" . (("gtags.google.com" . 2224)))
-    ("python" . (("gtags.google.com" . 2225))))
+  '(("c++" . (("localhost" . 2223)))
+    ("java" . (("localhost" . 2223)))
+    ("python" . (("localhost" . 2223))))
   "Similar to google-gtags-language-hosts, but these are for call graph
 servers")
 

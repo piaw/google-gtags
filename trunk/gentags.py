@@ -88,16 +88,22 @@ def main():
   print "Crawling source files."
   find_source_files(["."])
 
+  for language in file_list.keys():
+    if len(file_list[language]) > 0:
+      out_file = open(language + "_files", "w")
+      out_file.write(" ".join(file_list[language]))
+      out_file.close()
+
   etags_commands = {
-    'TAGS' : options.etags + " -o TAGS -a " + " ".join(file_list["cpp"]),
-    'JTAGS' : options.etags + " -o JTAGS -a " + " ".join(file_list["java"]),
-    'PTAGS' : options.etags + " -o PTAGS -a "  + " ".join(file_list["python"]),
-    'TAGSC' : options.rtags + " --output=TAGSC --append " +
-                              " ".join(file_list["cpp"]),
-    'JTAGSC' : options.rtags + " --output=JTAGSC --append " +
-                               " ".join(file_list["java"]),
-    'PTAGSC' : options.rtags + " --output=PTAGSC --append " +
-                               " ".join(file_list["python"]),
+    'TAGS' : "cat cpp_files | xargs " + options.etags + " -o TAGS -a ",
+    'JTAGS' : "cat java_files | xargs " + options.etags + " -o JTAGS -a ",
+    'PTAGS' : "cat python_files | xargs " + options.etags + " -o PTAGS -a ",
+    'TAGSC' : "cat cpp_files | xargs " + options.rtags +
+              " --output=TAGSC --append ",
+    'JTAGSC' : "cat java_files | xargs " + options.rtags +
+               " --output=JTAGSC --append ",
+    'PTAGSC' : "cat python_files | xargs " + options.rtags +
+               " --output=PTAGSC --append ",
     }
 
   for target in etags_commands.keys():

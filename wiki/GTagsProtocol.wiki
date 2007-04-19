@@ -112,7 +112,7 @@ Writes any number of s-expressions (the _expr_ values) to the server log, with u
 {{{
 (get-server-version _required-attributes_)
 }}}
-Retrieves the server version number. The ==return-value== is an integer specifying the server version.
+Retrieves the server version number. The _return-value_ is an integer specifying the server version.
 
 {{{
 (get-supported-protocol-versions *required-attributes*)

@@ -7,11 +7,10 @@ GTags server exactly the same way Emacs does. You can use this to augment any
 Python-capable editor to provide the same functionality. (The Vi client is
 built using this library.)
 
-Sample python code:
+Sample Python code:
 
 {{{
 import gtags
-
 
 results = gtags.find_matching_tags_exact("c++", "HandleRead", 0)
                                        # lang   tagname       show callers? (0,1)

@@ -1,15 +1,15 @@
 #summary How to build and deploy GTags
 
 == Build Requirement ==
-   * Gcc (tested on 4.0 only)
+   * Gcc (tested on 4.2.1 only)
    * Python 2.4
    * tar, gunzip
    * [http://www.boost.org/libs/test/doc/index.html Boost Test Library (only for building and running unit tests)]
 
 == Build Instruction ==
-To build GTags server, do
+To build GTags server, mixer, and watcher, do
 {{{
-$ cd gtags-1.0
+$ cd google-gtags-2.0.0
 $ ./configure
 $ make
 }}}
@@ -33,8 +33,9 @@ $ make runtests
    # Checkout complete source tree nightly from your repository.
    # Invoke gentags with: {{{gentags.py --etags=/path/to/etags --rtags=/path/to/rtags.py --etags_to_tags=/path/to/etags_to_tags.py}}}
    # For each generated {cpp|java|python}[{.callers}].tags.gz for, start a instance of gtags server.
-   # Edit gtags.el and gtags.py respectively so emacs and python clients know where the servers are.
+   # Edit gtags.el, gtags.py and gtagsmixer_socket_config respectively so emacs and python clients and the mixer know where the servers are.
+   # Edit gtags.el and gtags.py respectively so emacs and python clients know the location of the mixer.
    # Load gtags.el and gtags.vim in emacs and python respectively.
+   # Use the watcher to specify watch folders for the mixer.
 
 We recommend you repeat step 1 and 2 nightly. If you have gtags servers running, you can instruct them to load the new tags file by sending them `reload-tags-file` command. See GTagsProtocol for more details.
-

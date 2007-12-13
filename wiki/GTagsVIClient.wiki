@@ -51,8 +51,20 @@ change it in your `.vimrc` like so:
 let g:google_tags_default_filetype='java'
 }}}
 
-Finally, `gtags.vim` will also use your own local
+`gtags.vim` will also use your own local
 `tags` file, so you can generate tags yourself (using the
 command line tool `ctags`) for files you have open for
 add/edit, and the tags from your local `tags` file will be
 combined with the results from the GTAGS server.
+
+As of 2.0.0, `gtags.vim` uses the GTags mixer. It should automatically start on your first GTags query. If for some reason, you wish to bypass the mixer, you can do so by executing:
+
+{{{
+let g:google_tags_use_mixer=0
+}}}
+
+If you want to bypass the mixer altogether, you can add the previous line to your `.vimrc`.  To re-enable the mixer, execute
+
+{{{
+let g:google_tags_user_mixer=1
+}}}

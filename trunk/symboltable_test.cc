@@ -15,17 +15,13 @@
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 //
 // Author: psung@google.com (Phil Sung)
-//
-// Note: This file is branched from unittest of the same name
-// in google3/tools/tags. Unless a change is specific for the
-// open source version of the unittest, please make changes to
-// the file in google3/tools/tags and downintegrate.
 
-
+#include "gtagsunit.h"
 #include "symboltable.h"
-#include "test_incl.h"
 
-BOOST_AUTO_UNIT_TEST(SymbolTableTest_Get) {
+namespace {
+
+TEST(SymbolTableTest, Get) {
   SymbolTable* t = new SymbolTable();
   string s1("first string");
   string s2("first string");
@@ -33,7 +29,7 @@ BOOST_AUTO_UNIT_TEST(SymbolTableTest_Get) {
 
   // This ought to be true if we are to be confident that we are
   // actually eliminating duplication of strings in the SymbolTable
-  BOOST_CHECK_NOT_EQUAL(s1.c_str(), s2.c_str());
+  EXPECT_NE(s1.c_str(), s2.c_str());
 
   const char* c1 = t->Get(s1.c_str());
   const char* c2 = t->Get(s2.c_str());
@@ -41,11 +37,13 @@ BOOST_AUTO_UNIT_TEST(SymbolTableTest_Get) {
 
   // It's important that we check pointer equality (not string
   // equality) here
-  BOOST_CHECK_EQUAL(c1, c2);
+  EXPECT_EQ(c1, c2);
 
-  BOOST_CHECK_EQUAL(s1, c1);
-  BOOST_CHECK_EQUAL(s2, c2);
-  BOOST_CHECK_EQUAL(s3, c3);
+  EXPECT_EQ(s1, c1);
+  EXPECT_EQ(s2, c2);
+  EXPECT_EQ(s3, c3);
 
   delete t;
 }
+
+}  // namespace

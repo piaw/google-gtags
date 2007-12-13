@@ -19,6 +19,7 @@
 #ifndef TOOLS_TAGS_STDERR_LOGGER_H__
 #define TOOLS_TAGS_STDERR_LOGGER_H__
 
+#include "queryprofile.h"
 #include "tagsutil.h"
 #include "tags_logger.h"
 
@@ -27,18 +28,7 @@ class StdErrLogger : public GtagsLogger {
   StdErrLogger() { }
   ~StdErrLogger() { }
 
-  virtual ostream& GetStream(const char* file, int line, int severity) {
-    const string err_levels[] = {
-      "INFO", "WARNING", "ERROR", "FATAL"
-    };
-
-    cerr << "\n" << err_levels[severity] << ":" << file << ":" << line;
-    return cerr;
-  }
-
   virtual void Flush() { }
-
-  virtual void FlushLogStream() { }
 
   virtual void WriteProfileData(struct query_profile *q, time_t time) {
     cerr << "\n" << "PROFILE:" << q->client_ip << "," << q->time_receiving <<

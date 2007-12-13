@@ -19,8 +19,10 @@
 #include <string>
 #include <time.h>
 
+#include "queryprofile.h"
 #include "tagsprofiler.h"
 #include "tagsrequesthandler.h"
+#include "tags_logger.h"
 
 bool TagsIOProfiler::Execute() {
   clock_t clock_before_receiving = 0, clock_before_searching = 0,

@@ -19,13 +19,12 @@
 #ifndef TOOLS_TAGS_STRUTIL_H__
 #define TOOLS_TAGS_STRUTIL_H__
 
-#ifndef GTAGS_GOOGLE_INTERNAL
-#include "tagsutil.h"
-
 // Reimplementing a few functions that we use
 #include <cctype>
 #include <cstring>
 #include <string>
+
+using std::string;
 
 bool inline ascii_isspace(char c) { return isspace(c); }
 
@@ -35,18 +34,26 @@ string FastItoa(int i);
 // Warning: not thread safe
 const string & CEscape(const string & src_string);
 
-bool IsIntToken(const char* src);
+inline bool HasPrefixString(const string &str, const string &prefix) {
+  return str.compare(0, prefix.length(), prefix) == 0;
+}
 
-#else
+inline const char* var_strprefix(const char* str, const char* prefix) {
+  const int len = strlen(prefix);
+  return strncmp(str, prefix, len) == 0 ?  str + len : NULL;
+}
 
-#include "strings/strutil.h"
+// Declare a hash functions for strings to allow us to use hash_* containers
+// with strings.
+namespace __gnu_cxx {
+template<typename T> struct hash;
 
-string inline FastItoa(int i) {
-  return SimpleItoa(i);
+template<>
+struct hash<string> {
+  size_t operator() (const string& s) const;
+};
 }
 
 bool IsIntToken(const char* src);
-
-#endif  // GTAGS_GOOGLE_INTERNAL
 
 #endif  // TOOLS_TAGS_STRUTIL_H__

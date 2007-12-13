@@ -20,7 +20,7 @@
 " gtags_vim.py, and requires a vim executable with python support
 " compiled in.
 "
-" $Id: //depot/opensource/gtags/gtags.vim#4 $
+" $Id: //depot/opensource/gtags/gtags.vim#5 $
 "
 " Author: Laurence Gonsalves (laurence@google.com)
 "         Leandro Groisman (leandrog@google.com)
@@ -29,12 +29,42 @@
 " this:
 "   nmap <C-]> :call Gtag(expand('<cword>'))<CR>
 
+" Set Vim compatibility for this script
+let s:cpo_save = &cpo
+set cpo&vim
+
 """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 " Configuration variables - you can override these in your .vimrc
 """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+if ! exists('g:google_tags_corpus')
+  let g:google_tags_corpus = 'google3'
+endif
 if ! exists('g:google_tags_default_filetype')
   let g:google_tags_default_filetype = 'c++'
 endif
+" Set the proxy(e.g.: proxy:port) if you need to access gtags server via proxy.
+if ! exists('g:google_tags_proxy')
+  let g:google_tags_proxy = ''
+endif
+" GTags mixer settings. Set g:google_tags_user_mixer to 1 to enable mixer.
+if ! exists('g:google_tags_use_mixer')
+  let g:google_tags_use_mixer = 1
+endif
+if ! exists('g:google_tags_mixer_port')
+  let g:google_tags_mixer_port = 2220
+endif
+" Gtlist format: 'long' for 2-line or 'short' for 1-line
+if ! exists('g:google_tags_list_format')
+  let g:google_tags_list_format = 'short'
+endif
+" Gtlist height in lines, or empty string to split window equally
+if ! exists('g:google_tags_list_height')
+  let g:google_tags_list_height = ''
+endif
+if ! exists('g:google_tags_list_orientation')
+  let g:google_tags_list_orientation = 'horizontal'
+endif
+
 
 """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 " Setup
@@ -57,7 +87,10 @@ let g:google_tags_initialized = 0
 function! GtagInitialize()
   if ! g:google_tags_initialized
     exe 'pyfile ' . substitute(g:google_tags_vimfile, '\.vim$', '_vim', '') . '.py'
-  endif
+    augroup gtags
+      autocmd BufReadCmd gtags://* py ReadGtagsFile()
+    augroup end
+ endif
   let g:google_tags_initialized = 1
 endfunction
 
@@ -94,21 +127,73 @@ function! GtagWriteSnippetMatch_callers(name)
   python WriteTagFileSnippets_callers(vim.eval('a:name'))
 endfunction
 
+""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+" Functions for displaying a list of results (from Gtlist, etc).
+""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+let g:google_tags_list_buffer = '__GTags__'
+
+" Set up options, input mappings and highlighting for the GTags list window.
+function! s:SetListWindowOptions()
+  setlocal buftype=nofile
+  setlocal bufhidden=delete
+  setlocal noswapfile
+  setlocal nobuflisted
+  setlocal nonumber
+  setlocal noro
+  if v:version >= 700
+    setlocal cursorline
+  endif
+  nnoremap <buffer> <silent> <CR> :py OpenListTag(close=1,use_stack=1)<CR>
+  nnoremap <buffer> <silent> <S-CR> :py OpenListTag(split=1, close=1)<CR>
+  nnoremap <buffer> <silent> v :py OpenListTag()<CR><C-W>p
+  nnoremap <buffer> <silent> s :py OpenListTag(split=1)<CR><C-W>p
+  nnoremap <buffer> <silent> e :py OpenListTag()<CR>
+  nnoremap <buffer> <silent> <S-e> :py OpenListTag(split=1)<CR>
+  nnoremap <buffer> <silent> <2-LeftMouse> :py OpenListTag()<CR>
+  nnoremap <buffer> <silent> <MiddleMouse> <LeftMouse>:py OpenListTag(split=1)<CR>
+  nnoremap <buffer> <silent> q :close<CR>
+  if has('syntax')
+    syntax match gtagsFile /^[^|]*/ nextgroup=gtagsSeparator
+    syntax match gtagsSeparator /|/ contained nextgroup=gtagsLine
+    syntax match gtagsLine /[0-9]*/ contained
+    highlight link gtagsFile Directory
+    highlight link gtagsLine LineNr
+  endif
+endfunction
+
+" Switch to the GTags list window, creating it and its buffer if necessary.
+function! s:SwitchToListWindow()
+  let buf = g:google_tags_list_buffer
+  let height = g:google_tags_list_height
+  let vert = (g:google_tags_list_orientation == 'vertical') ? 'vertical' : ''
+  " If the window exists, just jump to it
+  if bufwinnr(buf) != -1
+    exe bufwinnr(buf) . 'wincmd w'
+    return
+  endif
+  " Create a window, using the previous buffer number if a buffer
+  " exists or creating a new buffer otherwise.
+  if bufnr(buf) != -1
+    exe 'silent! bo ' . height . ' ' . vert . ' split +buffer' . bufnr(buf)
+  else
+    exe 'silent! bo ' . height . ' ' . vert . ' split ' . buf
+  endif
+  call s:SetListWindowOptions()
+endfunction
+
+" Display a list with the results of the given find-tags function.
+function! GtagList(findFunction, name)
+  call GtagInitialize()
+  exe 'python GtagList(' . a:findFunction . '(vim.eval("a:name")))'
+endfunction
 
 """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 " Public functions/command
 """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 " position the cursor under the word and add it to the current
-" search list (useful while opening proto files as there is no
-" lineno info for them -- no index on protofiles)
-
-let g:decipher_protofiles = 0
+" search list
 
 function! s:MoveCursor(name)
-  if g:decipher_protofiles && &ft == 'proto'
-    call search('\<'. a:name . '\>')
-    let @/=a:name
-  endif
 endfunction
 
 """""""""""""""""""""
@@ -286,7 +371,7 @@ function! Gtgrep(pattern)
   let errorformat=&errorformat
 
   " load 
-  let &errorformat='%f:%l:%m'
+  let &errorformat='%f|%l|%m'
   copen
   exe 'cgetfile ' . g:google_grep
 
@@ -294,6 +379,33 @@ function! Gtgrep(pattern)
   let &errorformat=errorformat
 endfunction
 command! -nargs=1 -complete=custom,Gtag_complete Gtgrep call Gtgrep("<args>")
+
+""""""""""""""""""""
+" Commands for displaying a list of results in the GTags list window
+command! -nargs=1 -complete=custom,Gtag_complete Gtlist
+      \ call GtagList("FindExactTag", "<args>")
+command! -nargs=1 -complete=custom,Gtag_complete Gtlistregexp
+      \ call GtagList("FindTagByPattern", "<args>")
+command! -nargs=1 -complete=custom,Gtag_complete Gtlistsnippet
+      \ call GtagList("SearchTagSnippets", "<args>")
+command! -nargs=1 -complete=custom,Gtag_complete Gtlistcallers
+      \ call GtagList("FindExactTagCallers", "<args>")
+command! -nargs=1 -complete=custom,Gtag_complete Gtlistregexpcallers
+      \ call GtagList("FindTagCallersByPattern", "<args>")
+command! -nargs=1 -complete=custom,Gtag_complete Gtlistsnippetcallers
+      \ call GtagList("SearchTagCallersSnippets", "<args>")
+
+""""""""""""""""""""
+" Restart GTags mixer
+function! Gtrestartmixer()
+  call GtagInitialize()
+  py RestartMixer()
+endfunction
+command! -nargs=0 Gtrestartmixer call Gtrestartmixer()
+
+""""""""""""""""""""
+" Set GTags corpus
+command! -nargs=1 Gtcorpus let g:google_tags_corpus="<args>"
 
 
 """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
@@ -313,3 +425,7 @@ endfunction
 command! -nargs=1 -complete=custom,Gtag_complete GTag call Gtag("<args>")
 command! -nargs=1 -complete=custom,Gtag_complete GTJump call Gtjump("<args>")
 command! -nargs=1 -complete=custom,Gtag_complete GTSelect call Gtselect("<args>")
+
+" Restore user's compatibility options
+let &cpo = s:cpo_save
+unlet s:cpo_save

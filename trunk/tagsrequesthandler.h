@@ -27,20 +27,19 @@
 #ifndef TOOLS_TAGS_TAGSREQUESTHANDLER_H__
 #define TOOLS_TAGS_TAGSREQUESTHANDLER_H__
 
+#include "filename.h"
+#include "mutex.h"
 #include "tagstable.h"
-#include "tags_logger.h"
 
+struct query_profile;
 class ProtocolRequestHandler;
 
-// Stores a TAGS file and converts protocol inputs to outputs
+using gtags::Mutex;
+
 class TagsRequestHandler {
  public:
-  // New request handler initially reading from tags_file
-  TagsRequestHandler(string tags_file,
-                     bool enable_fileindex,
-                     bool enable_gunzip);
-
-  ~TagsRequestHandler();
+  TagsRequestHandler() {}
+  virtual ~TagsRequestHandler() {}
 
   // Takes an input query string and returns the appropriate response
   // string.
@@ -50,9 +49,39 @@ class TagsRequestHandler {
   //    after the index is queried but before the results are
   //    formatted.
   // -- Fills *pcomment with any comment found in the command.
-  string Execute(const char* command,
-                 clock_t* pclock_before_preparing_results,
-                 struct query_profile* log);
+  virtual string Execute(const char* command,
+                         clock_t* pclock_before_preparing_results,
+                         struct query_profile* log) = 0;
+};
+
+// Stores a TAGS file and converts protocol inputs to outputs
+class SingleTableTagsRequestHandler : public TagsRequestHandler {
+ public:
+  // New request handler initially reading from tags_file
+  SingleTableTagsRequestHandler(string tags_file,
+                                bool enable_fileindex,
+                                bool enable_gunzip,
+                                string corpus_root);
+
+  virtual ~SingleTableTagsRequestHandler();
+
+  // Takes an input query string and returns the appropriate response
+  // string.
+  //
+  // Execute also does the following, for logging purposes:
+  // -- Sets *pclock_before_preparing_results to be the clock value
+  //    after the index is queried but before the results are
+  //    formatted.
+  // -- Fills *pcomment with any comment found in the command.
+  virtual string Execute(const char* command,
+                         clock_t* pclock_before_preparing_results,
+                         struct query_profile* log);
+
+ protected:
+  // Only use when creating mock TagsRequestHandler in tests.
+  SingleTableTagsRequestHandler() : tags_table_(0),
+                                    opcode_handler_(0),
+                                    sexp_handler_(0) {}
 
  private:
   // Currently loaded tags table
@@ -72,8 +101,9 @@ class ProtocolRequestHandler {
  public:
   // fileindex specifies whether to create a per-file index of
   // tags. This requires a lot more memory.
-  ProtocolRequestHandler(bool fileindex, bool gunzip)
-      : enable_fileindex_(fileindex), enable_gunzip_(gunzip) { }
+  ProtocolRequestHandler(bool fileindex, bool gunzip, string corpus_root)
+      : enable_fileindex_(fileindex), enable_gunzip_(gunzip),
+        corpus_root_(corpus_root) { }
 
   // Returns the correct response string for input COMMAND using the
   // specified tags table. Update pclock and pcomment as specified by
@@ -83,9 +113,15 @@ class ProtocolRequestHandler {
                          clock_t* pclock_before_preparing_results,
                          struct query_profile* log) = 0;
 
+  string StripCorpusRoot(const string& path);
+
  protected:
   bool enable_fileindex_;
   bool enable_gunzip_;
+
+  // Name of the root directory of the corpus, or the empty string to use
+  // absolute paths.
+  string corpus_root_;
 
   // These are all the commands available.
   enum TagsCommand {
@@ -98,7 +134,8 @@ class ProtocolRequestHandler {
     LOOKUP_TAG_PREFIX_REGEXP = ':',
     LOOKUP_TAG_SNIPPET_REGEXP = '$',
     LOOKUP_TAGS_IN_FILE = '@',
-    FIND_FILE = '&'
+    FIND_FILE = '&',
+    LOAD_UPDATE_FILE = '+'
   };
 };
 
@@ -106,8 +143,8 @@ class ProtocolRequestHandler {
 // string)
 class OpcodeProtocolRequestHandler : public ProtocolRequestHandler {
  public:
-  OpcodeProtocolRequestHandler(bool fileindex, bool gunzip)
-      : ProtocolRequestHandler(fileindex, gunzip) { }
+  OpcodeProtocolRequestHandler(bool fileindex, bool gunzip, string corpus_root)
+      : ProtocolRequestHandler(fileindex, gunzip, corpus_root) { }
 
   virtual string Execute(const char*, TagsTable*, clock_t*,
                          struct query_profile*);
@@ -126,15 +163,57 @@ class OpcodeProtocolRequestHandler : public ProtocolRequestHandler {
   string EscapeQuotes(string s);
 };
 
+// TagsResultPredicate is used by SExpressionHandler to perform additional
+// filtering on the TagsResults returned by TagsTable. We pass each result
+// to Test and it will only get returned to the caller if Test returns True.
+class TagsResultPredicate {
+ public:
+  virtual bool Test(const TagsTable::TagsResult* result) const = 0;
+};
+
+// Used on remote GTags servers. No need for filtering since each server serves
+// a specific language/caller type.
+class DefaultTagsResultPredicate : public TagsResultPredicate {
+ public:
+  virtual bool Test(const TagsTable::TagsResult* result) const {
+    return true;
+  }
+};
+
+// Used by local GTags server to determine whether the result matches what the
+// user requested. Test returns true only when a user's current-file is from the
+// same p4 client as result's filename field AND user's query language matches
+// result's language field.
+class LanguageClientTagsResultPredicate : public TagsResultPredicate {
+ public:
+  LanguageClientTagsResultPredicate(const string& language,
+                                    const string& client_path)
+      : language_(language), client_path_(client_path) {
+  }
+
+  virtual bool Test(const TagsTable::TagsResult* result) const {
+    return (strncmp(result->language, language_.c_str(), language_.size()) == 0)
+        && HasPrefixString(result->filename->Str(), client_path_);
+  }
+
+ private:
+  const string& language_;
+  const string& client_path_;
+};
+
 // Handles requests for the new s-expression based protocol.
 class SexpProtocolRequestHandler : public ProtocolRequestHandler {
  public:
-  SexpProtocolRequestHandler(bool fileindex, bool gunzip);
+  SexpProtocolRequestHandler(bool fileindex, bool gunzip, string corpus_root);
 
   ~SexpProtocolRequestHandler();
 
   virtual string Execute(const char*, TagsTable*, clock_t*,
                          struct query_profile*);
+
+  virtual string Execute(const char*, TagsTable*,
+                         clock_t*, struct query_profile*,
+                         const TagsResultPredicate* predicate);
 
  private:
   // TODO(psung): Support FIND_FILE in protocol v2
@@ -154,17 +233,20 @@ class SexpProtocolRequestHandler : public ProtocolRequestHandler {
     bool callers;
     string file;
     string comment;       // Plain string, or list of s-exps
+
+    list<string> ranking; // List of field names for ordering results
   };
 
   // Given a list of tags matches, prints them as specified by the
-  // protocol and appends to output.
+  // protocol if the match passes the predicate and appends to output.
   void PrintTagsResults(list<const TagsTable::TagsResult*>* matches,
-                        string* output);
+                        string* output, const TagsResultPredicate* predicate);
 
-  // Converts input string to standard data
+  // Converts parsed expression to standard data
   // structure. Default_callers_value is the default value to fill in
   // for query.callers if it's not set in the command.
-  TagsQuery TranslateInput(const char* command, bool default_callers_value);
+  TagsQuery TranslateInput(const char* sexpressionCommand,
+                           bool default_callers_value);
 
   // Server start time, in seconds since the epoch
   time_t server_start_time_;
@@ -176,6 +258,32 @@ class SexpProtocolRequestHandler : public ProtocolRequestHandler {
 
   // Map to convert client-type field into two-char description for log
   map<string, string>* client_code_map_;
+};
+
+// A thread-safe TagsRequesHandler for all local tags queries.
+// We use only one table to store tags information for all languages and
+// clients. We run a filter through all results before returning to caller.
+// Performance wise, this is OK because this operation is running in parallel
+// with remote tags query which is network IO bounded.
+class LocalTagsRequestHandler {
+ public:
+  LocalTagsRequestHandler(bool fileindex, bool gunzip, string corpus_root);
+  ~LocalTagsRequestHandler();
+
+  string Execute(const char* command, const string& language,
+                 const string& client_path);
+
+  void Update(const string& filename);
+
+  // Unload all files under directory from tagstable.
+  virtual void UnloadFilesInDir(const string& dirname);
+
+ private:
+  SexpProtocolRequestHandler* sexpr_handler_;
+  TagsTable* tags_table_;
+  Mutex mu_;
+
+  DISALLOW_EVIL_CONSTRUCTORS(LocalTagsRequestHandler);
 };
 
 #endif  // TOOLS_TAGS_TAGSREQUESTHANDLER_H__

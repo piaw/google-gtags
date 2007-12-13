@@ -34,6 +34,8 @@ import gtags
 
 import socket
 import signal
+import os
+import time
 from cStringIO import StringIO
 
 # Server list
@@ -57,16 +59,74 @@ SYMBOL_CHARS = "abcdefghijklmnopqrstuvwxyz" + \
                "0123456789" + \
                "+-*/@$%^&_=<>~.?![]{}"
 
-PYCLIENT_VERSION = 2
+PYCLIENT_VERSION = 3
 PY_CLIENT_IDENTIFIER = "python"
 
+default_corpus = 'google3'
 default_language = 'c++'
 
-CONNECT_TIMEOUT = 10
-DATA_TIMEOUT = 50
+CONNECT_TIMEOUT = 5.0
+DATA_TIMEOUT = 5.0
 
-def alarm_handler(signum, frame):
-  raise RuntimeError, "Timeout!"
+# GTags mixer settings.
+# Command to launch mixer.
+MIXER_CMD = "/path/to/gtagsmixer"
+# Number of tries before we declare mixer is unreachable.
+MIXER_RETRIES = 5
+# Waiting time between retries (in ms).
+MIXER_RETRY_DELAY = 100
+# Default mixer port
+MIXER_PORT = 2220
+
+def send_to_server(host, port, command, timeout=DATA_TIMEOUT, proxy=None):
+   '''
+   Sends command to specified port of gtags server and returns response.
+
+   Use this function only if you want to send a command to a specific data
+   center/gtags server. Otherwise, use send_to_server in connection_manager
+   which does automatic data center selection and failover based on query
+   language and call type.
+   '''
+   if proxy:
+     import socks
+     s = socks.socksocket(socket.AF_INET, socket.SOCK_STREAM)
+     i = proxy.find(":")
+     if i != -1:
+       s.setproxy(socks.PROXY_TYPE_HTTP, proxy[0:i], int(proxy[i+1:]))
+     else:
+       s.setproxy(socks.PROXY_TYPE_HTTP, proxy)
+   else:
+     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+   s.setblocking(1)
+   s.settimeout(CONNECT_TIMEOUT)
+   address = socket.getaddrinfo(host, port, socket.AF_INET,
+                                socket.SOCK_STREAM)
+   s.connect(address[0][4])
+   s.settimeout(timeout)
+
+   # need \r\n to match telnet protocol
+   s.sendall(command + '\r\n')
+
+   class SocketReader:
+     """SocketReader exposes a single function 'GetResponse' to the caller
+     of send_to_server. If the caller is interested in the server response,
+     it can call GetResponse(). Otherwise, the caller is free ignore the
+     return value"""
+     def __init__(self, socket):
+       self._socket = socket
+
+     def GetResponse(self):
+       buf = StringIO()
+       data = s.recv(1024)
+
+       # accumulate all data
+       while data:
+         buf.write(data)
+         data = s.recv(1024)
+         signal.alarm(0)
+       return buf.getvalue()
+
+   return SocketReader(s)
 
 # a class to store tags related information
 class ETag:
@@ -124,6 +184,11 @@ class TagsConnectionManager(object):
                            "definition" : {}}
     self.indexes = {"callgraph" : {},
                     "definition" : {}}
+    # A http proxy, e.g: webcache:8080
+    self.proxy = None
+    self.use_mixer = False
+    self.mixer_port = MIXER_PORT
+    self.mixer_launched = False
 
   # Add a server to the list of known servers
   def add_server(self, language, callgraph, host, port):
@@ -140,7 +205,8 @@ class TagsConnectionManager(object):
   # Return the current selected server for the language and callgraph
   def selected_server(self, language, callgraph):
     if (not self.current_server[callgraph].has_key(language)):
-      self.current_server[callgraph][language] = self.next_server(language, callgraph)
+      self.current_server[callgraph][language] = \
+          self.next_server(language, callgraph)
     return self.current_server[callgraph][language]
 
   # Switch to the next available server for the language and callgraph
@@ -148,51 +214,46 @@ class TagsConnectionManager(object):
   def next_server(self, language, callgraph):
     if (not self.indexes[callgraph].has_key(language)):
       self.indexes[callgraph][language] = 0
+    if (not self.lang_to_server[callgraph].has_key(language)):
+      self.lang_to_server[callgraph][language] = []
     if (len(self.lang_to_server[callgraph][language]) <=
         self.indexes[callgraph][language]):
       raise NoAvailableServer
-    self.current_server[callgraph][language] = self.lang_to_server[callgraph][language][self.indexes[callgraph][language]]
+    self.current_server[callgraph][language] = \
+        self.lang_to_server[callgraph][language] \
+            [self.indexes[callgraph][language]]
     self.indexes[callgraph][language] += 1
     return self.current_server[callgraph][language]
 
   # Send a command to server
-  # Figure out hostname and port base on language and callgraph
-  # and call _send_to_server. If we can't reach current selected
-  # sever, move to the next one and try again
+  # When self.use_mixer is True, try starting the mixer if called for the
+  # first time. After that, send queries to the mixer. If self.user_mixer is not
+  # True, figure out hostname and port base on language and callgraph and
+  # call send_to_server. If we can't reach current selected sever, move to the
+  # next one and try again
   def send_to_server(self, language, is_callgraph, command):
+    if not self.proxy and self.use_mixer:
+      if not self.mixer_launched:
+        os.system(MIXER_CMD + " --port %s" % self.mixer_port + " &")
+        time.sleep(0.5)
+        self.mixer_launched = True
+      for retry_count in xrange(MIXER_RETRIES):
+        try:
+          return send_to_server("localhost", self.mixer_port,
+                                command).GetResponse()
+        except socket.error, socket_error:
+          if retry_count < MIXER_RETRIES - 1:
+            time.sleep(MIXER_RETRY_DELAY / 1000.0)
+          else:
+            raise socket_error
+
     callgraph = server_type(is_callgraph)
     while 1:
       host, port = self.selected_server(language, callgraph)
       try:
-        return self._send_to_server(host, port, command)
+        return send_to_server(host, port, command, proxy=self.proxy).GetResponse()
       except socket.error:
         self.next_server(language, callgraph)
-
-  def _send_to_server(self, host, port, command):
-     '''
-     Sends command to specified port of gtags server and returns response.
-     '''
-     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-     address = socket.getaddrinfo(host, port, socket.AF_INET,
-                               socket.SOCK_STREAM)
-     signal.signal(signal.SIGALRM, alarm_handler)
-     signal.alarm(CONNECT_TIMEOUT)
-     s.connect(address[0][4])
-     signal.alarm(0)
-     signal.alarm(DATA_TIMEOUT)
-
-     # need \r\n to match telnet protocol
-     s.sendall(command + '\r\n')
-
-     buf = StringIO()
-     data = s.recv(1024)
-
-     # accumulate all data
-     while data:
-       buf.write(data)
-       data = s.recv(1024)
-     signal.alarm(0)
-     return buf.getvalue()
 
 # Instance of connection_manager that forwards client requests to gtags server
 connection_manager = TagsConnectionManager()
@@ -218,10 +279,24 @@ def string_lisp_repr(string):
   retval += '"'
   return retval
 
+def boolean_lisp_repr(boolean_value):
+  """
+  Convert a python boolean value (basically anything that evaluates to true or
+  false) to s-expression equivalents (nil or t).
+  """
+  if boolean_value:
+    return "t"
+  else:
+    return "nil"
+
 def make_command(command_type,
                  extra_params = [],
+                 language = default_language,
+                 callgraph = 0,
                  client_type = "python",
-                 client_version = PYCLIENT_VERSION):
+                 client_version = PYCLIENT_VERSION,
+                 corpus = default_corpus,
+                 current_file = None):
   """
   Given a command-type (string) and list of extra parameters,
   constructs a query string that we can send to the server.
@@ -231,6 +306,18 @@ def make_command(command_type,
   => '(foo (client-type "python") (client-version 2) (protocol-version 2)
            (tag 40) (file "gtags.py"))'
   """
+  client_string = ('(client-type %s) (client-version %s) (protocol-version 2)'
+      % (string_lisp_repr(client_type), client_version))
+
+  corp_lang_call_string = '(corpus %s) (language %s) (callers %s)' \
+                            % (string_lisp_repr(corpus),
+                               string_lisp_repr(language),
+                               boolean_lisp_repr(callgraph))
+
+  current_file_string = ''
+  if current_file:
+    current_file_string = '(current-file %s)' % string_lisp_repr(current_file)
+
   param_string = ""
   for param in extra_params:
     if isinstance(param[1], str):
@@ -238,11 +325,10 @@ def make_command(command_type,
     else:
       value_repr = repr(param[1])
     param_string += ' (%s %s)' % (param[0], value_repr)
-  return '(%s (client-type %s) (client-version %s) (protocol-version 2)%s)' \
-         % (command_type,
-            string_lisp_repr(client_type),
-            client_version,
-            param_string)
+  
+  return '(%s %s %s %s %s)' \
+         % (command_type, client_string, corp_lang_call_string, 
+            current_file_string, param_string)
 
 # returns a list of tags matching id for language language
 # Deprecated-- use find_matching_tags_exact instead.
@@ -251,12 +337,16 @@ def find_tag(language,
              id,
              callgraph = 0,
              decipher_genfiles = 0,
-             client = 'py'):
+             client = 'py',
+             corpus = default_corpus,
+             current_file=None):
   return find_matching_tags_exact(language,
                                   id,
                                   callgraph,
                                   decipher_genfiles,
                                   client,
+                                  corpus,
+                                  current_file,
                                   0)
 
 def parse_sexp(str):
@@ -283,9 +373,9 @@ def parse_sexp(str):
   def unescape_string(str):
     """
     Requires: str does not contain any escaped characters other than
-    \\ and \".
+    \\, \t and \".
 
-    Returns str, with \\ and \" replaced with \ and " respectively.
+    Returns str, with escaped characters replaced with their original versions.
     """
     chars = []
     i = 0
@@ -296,6 +386,8 @@ def parse_sexp(str):
                                       # ends in unescaped slash
         if str[i+1] in ["\\", "\""]:
           chars.append(str[i+1])
+        elif str[i+1] == "t":
+          chars.append("\t");
         i += 1
       else:
         chars.append(str[i])
@@ -425,6 +517,8 @@ def find_matching_tags(lang,
                        callgraph = 0,
                        decipher_genfiles = 0,
                        client = PY_CLIENT_IDENTIFIER,
+                       corpus = default_corpus,
+                       current_file = None,
                        ignore_output = 0):
   return do_gtags_command('lookup-tag-prefix-regexp',
                           [["tag", id]],
@@ -432,6 +526,8 @@ def find_matching_tags(lang,
                           callgraph,
                           decipher_genfiles,
                           client,
+                          corpus,
+                          current_file,
                           ignore_output)
 
 # Exact match
@@ -440,6 +536,8 @@ def find_matching_tags_exact(lang,
                              callgraph = 0,
                              decipher_genfiles = 0,
                              client = PY_CLIENT_IDENTIFIER,
+                             corpus = default_corpus,
+                             current_file = None,
                              ignore_output = 0):
   return do_gtags_command('lookup-tag-exact',
                           [["tag", id]],
@@ -447,6 +545,8 @@ def find_matching_tags_exact(lang,
                           callgraph,
                           decipher_genfiles,
                           client,
+                          corpus,
+                          current_file,
                           ignore_output)
 
 # Snippets search
@@ -454,6 +554,8 @@ def search_tag_snippets(lang,
                         id,
                         callgraph = 0,
                         client = PY_CLIENT_IDENTIFIER,
+                        corpus = default_corpus,
+                        current_file = None,
                         ignore_output = 0):
   return do_gtags_command('lookup-tag-snippet-regexp',
                           [["tag", id]],
@@ -461,6 +563,8 @@ def search_tag_snippets(lang,
                           callgraph,
                           0,
                           client,
+                          corpus,
+                          current_file,
                           ignore_output)
 
 # Check server status with '/' (ping) command
@@ -469,7 +573,11 @@ def check_server_status(lang,
                         client = PY_CLIENT_IDENTIFIER):
   return connection_manager.send_to_server(lang,
                                            callgraph,
-                                           make_command('ping', [], client))
+                                           make_command('ping',
+                                                        [],
+                                                        lang,
+                                                        callgraph,
+                                                        client))
 
 # Reload tag file using 'file'
 def reload_tagfile(file,
@@ -480,6 +588,8 @@ def reload_tagfile(file,
                                            callgraph,
                                            make_command('reload-tags-file',
                                                         [["file", file]],
+                                                        lang,
+                                                        callgraph,
                                                         client))
 
 # List all tags in a file
@@ -491,18 +601,27 @@ def list_tags_for_file(lang, filename, client = PY_CLIENT_IDENTIFIER):
                           0,
                           client)
 
+class ErrorMessageFromServer(Exception):
+  """Raise an instance of this class if we get a (error ((message "message"))
+  from the server"""
+
 def do_gtags_command(command,
                      parameters,
                      lang,
                      callgraph = 0,
                      decipher_genfiles = 0,
                      client = PY_CLIENT_IDENTIFIER,
+                     corpus = default_corpus,
+                     current_file = None,
                      ignore_output = 0):
-  tags_data = connection_manager.send_to_server(lang,
-                                                callgraph,
-                                                make_command(command,
-                                                             parameters,
-                                                             client))
+  tags_data = connection_manager.send_to_server(
+      lang, callgraph, make_command(command,
+                                    parameters,
+                                    lang,
+                                    callgraph,
+                                    client,
+                                    corpus = corpus,
+                                    current_file = current_file))
 
   if ignore_output:
     return tags_data
@@ -514,6 +633,12 @@ def do_gtags_command(command,
   response_dict = alist_to_dictionary(parse_sexp(tags_data))
 
   for tag_sexp in response_dict["value"]:
+    # Check for error message in the form of
+    # [("error",) [[("message"), message],]]
+    if "error" == tag_sexp[0][0]:
+      error_dict = alist_to_dictionary(tag_sexp[1])
+      raise ErrorMessageFromServer(error_dict["message"])
+
     tag_dict = alist_to_dictionary(tag_sexp)
     filename = tag_dict["filename"]
 
@@ -534,6 +659,20 @@ def do_gtags_command(command,
 
   return prepend_tag_list + tag_list
 
-def server_reload(language, callgraph, filename):
-  connection_manager.send_to_server(language, callgraph,
-    make_command('reload-tags-file', [['file', filename]]) + '\r\n')
+def server_reload(host, port, filename):
+  # Don't time out on server reloading as it can take a long time
+  send_to_server(host,
+                 port,
+                 make_command('reload-tags-file',
+                              [['file', filename]],
+                              'nil', 'nil') + '\r\n',
+                 timeout = 0)
+
+def server_load_update_file(host, port, filename):
+  # Don't time out, because updates can take a few seconds
+  send_to_server(host,
+                 port,
+                 make_command('load-update-file',
+                              [['file', filename]],
+                              'nil', 'nil') + '\r\n',
+                 timeout = 0)

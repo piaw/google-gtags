@@ -29,8 +29,8 @@
 //     files.
 // map_: multimap from tag name to TagsResult*'s for all tags with
 //     that name.
-// filemap_: multimap from filename to TagsResult*'s for all tags in
-//     that file. Creation of the filemap can be enabled or disabled
+// filemap_: map from filename to a vector of TagsResult*'s for all tags
+//     in that file. Creation of the filemap can be enabled or disabled
 //     in the constructor.
 // findfilemap_: multimap which maps BASE to all filenames which have
 //     basename BASE.
@@ -61,18 +61,19 @@
 //     processPath(attr_value);
 //   } else if ...
 
-#include <deque>
+#include "tagstable.h"
+
 #include <ext/hash_map>
 #include <ext/hash_set>
-#include <map>
+#include <deque>
 #include <list>
+#include <map>
 #include <set>
 #include <vector>
 
 #include "regexp.h"
 #include "tagsutil.h"
 #include "tagsoptionparser.h"
-#include "tagstable.h"
 
 DEFINE_INT32(max_results, 2000,
              "Maximum number of results to return to clients");
@@ -90,24 +91,34 @@ TagsTable::~TagsTable() {
   delete map_;
   delete fileset_;
   delete strings_;
+  delete loaded_files_;
 }
 
 // Parses tags information from FILENAME, overwriting anything that
 // was previously in the table. If enable_gunzip is true then filters
 // the input through gunzip.
-bool TagsTable::ReloadTagFile(const string& filename, bool enable_gunzip) {
+bool TagsTable::ReloadTagFile(const string& filename,
+                              bool enable_gunzip) {
   LOG(INFO) << "Loading " << filename;
-  SExpression::FileReader filereader(filename, enable_gunzip);
-
   FreeData();
+  return LoadTagFile(filename, enable_gunzip);
+}
+
+bool TagsTable::UpdateTagFile(const string& filename,
+                              bool enable_gunzip) {
+  LOG(INFO) << "Updating " << filename;
+  return LoadTagFile(filename, enable_gunzip);
+}
+
+bool TagsTable::LoadTagFile(const string& filename,
+                              bool enable_gunzip) {
+  FileReader<SExpression> filereader(filename, enable_gunzip);
 
   tags_comment_ = "";
   tagfile_creation_time_ = static_cast<time_t>(0);
   corpus_name_ = "";
 
-
-  for (hash_map<const char *, bool, hash<const char*> >::iterator i =
-           features_.begin();
+  for (hash_map<string, bool>::iterator i = features_.begin();
        i != features_.end(); ++i) {
     i->second = false;
   }
@@ -147,6 +158,10 @@ bool TagsTable::ReloadTagFile(const string& filename, bool enable_gunzip) {
       // Handle file declarations
       files_loaded = true;
       ParseFileDeclaration(sexp);
+    } else if (sexp_iter->Repr() == "deleted") {
+      // Handle "deleted" entries, which can occur in update files
+      files_loaded = true;
+      ParseDeletedDeclaration(sexp);
     } else {
       // Handle header declarations (everything except 'file')
       CHECK(!files_loaded) << "Header declarations must precede "
@@ -157,7 +172,7 @@ bool TagsTable::ReloadTagFile(const string& filename, bool enable_gunzip) {
     delete sexp;
   }
 
-  LOG(INFO) << "Successfully loaded file.";
+  LOG(INFO) << "Successfully loaded TAGS file.";
 
   return true;
 }
@@ -179,7 +194,8 @@ bool TagsTable::SearchCallersByDefault() const {
 }
 
 list<const TagsTable::TagsResult*>* TagsTable::FindSnippetMatches(
-    const string& match, const string& current_file, bool callers) const {
+    const string& match, const string& current_file, bool callers,
+    const list<string>* ranking) const {
   list<const TagsResult*>* retval = new list<const TagsResult*>();
   int resultcount = 0;
   multimap<const char*, const TagsResult*>::const_iterator pos;
@@ -203,7 +219,8 @@ list<const TagsTable::TagsResult*>* TagsTable::FindSnippetMatches(
 }
 
 list<const TagsTable::TagsResult*>* TagsTable::FindRegexpTags(
-    const string& tag, const string& current_file, bool callers) const {
+    const string& tag, const string& current_file, bool callers,
+    const list<string>* ranking) const {
   list<const TagsResult*>* retval = new list<const TagsResult*>();
   int resultcount = 0;
   multimap<const char*, const TagsResult*>::const_iterator pos;
@@ -236,7 +253,8 @@ list<const TagsTable::TagsResult*>* TagsTable::FindRegexpTags(
 }
 
 list<const TagsTable::TagsResult*>* TagsTable::FindTags(
-    const string& tag, const string& current_file, bool callers) const {
+    const string& tag, const string& current_file, bool callers,
+    const list<string>* ranking) const {
   list<const TagsResult*>* retval = new list<const TagsResult*>();
   int resultcount = 0;
 
@@ -259,24 +277,18 @@ list<const TagsTable::TagsResult*>* TagsTable::FindTagsByFile(
     const string& filename, bool callers) const {
   list<const TagsResult*>* retval = new list<const TagsResult*>();
   int resultcount = 0;
-
   Filename query_file(filename.c_str());
 
-  pair<
-  hash_multimap<const Filename*, const TagsResult*, FileHash, FileEq>
-    ::const_iterator,
-    hash_multimap<const Filename*, const TagsResult*, FileHash, FileEq>
-    ::const_iterator>
-    limits = filemap_->equal_range(&query_file);
-
-  for (hash_multimap<const Filename*, const TagsResult*, FileHash, FileEq>
-         ::const_iterator pos = limits.first;
-       pos != limits.second && resultcount < GET_FLAG(max_results);
-       pos++) {
-    retval->push_back(pos->second);
-    resultcount++;
+  FileMap::const_iterator pos = filemap_->find(&query_file);
+  if (pos != filemap_->end()) {
+    const std::vector<const TagsResult*>& results = pos->second;
+    for (vector<const TagsResult*>::const_iterator i = results.begin();
+         i != results.end() && resultcount < GET_FLAG(max_results);
+         ++i) {
+      retval->push_back(*i);
+      resultcount++;
+    }
   }
-
   return retval;
 }
 
@@ -301,22 +313,19 @@ set<string>* TagsTable::FindFile(const string& filename) const {
 
 void TagsTable::Initialize() {
   strings_ = new SymbolTable();
-  fileset_ = new hash_set<const Filename*, FileHash, FileEq>();
-  map_ = new multimap<const char*, const TagsResult*, StrCompare>();
-  filemap_
-    = new hash_multimap<const Filename*, const TagsResult*, FileHash, FileEq>();
-  findfilemap_
-    = new hash_multimap<const char*, const Filename*, hash<const char*>, StrEq>
-    ();
+  fileset_ = new FileSet();
+  loaded_files_ = new FileSet();
+  map_ = new TagMap();
+  filemap_ = new FileMap();
+  findfilemap_ = new FindFileMap();
   // Register known features
   features_["callers"] = false;
 }
 
 void TagsTable::FreeData() {
-
   // Each TagResult appears as a value in map_ exactly once, so delete
   // all TagsResults here.
-  multimap<const char*, const TagsResult*, StrCompare>::iterator i;
+  TagMap::iterator i;
   for (i = map_->begin(); i != map_->end(); ++i) {
     delete i->second;
   }
@@ -330,12 +339,15 @@ void TagsTable::FreeData() {
   // below.
   findfilemap_->clear();
 
+  // Deleted list of loaded files
+  loaded_files_->clear();
+
   // Each Filename appears exactly once in this set; delete them all
   // here.
-  hash_set<const Filename*, FileHash, FileEq>::iterator j;
+  FileSet::iterator j;
   for (j = fileset_->begin(); j != fileset_->end();) {
     // advance the iterator before we delete the element
-    hash_set<const Filename*, FileHash, FileEq>::iterator temp = j;
+    FileSet::iterator temp = j;
     j++;
     delete *temp;
   }
@@ -344,6 +356,79 @@ void TagsTable::FreeData() {
   // Delete the stored strings. Every string stored as a map key or
   // inside a TagsResult ought to be stored here.
   strings_->Clear();
+}
+
+void TagsTable::UnloadFilesInDir(const string& dirname) {
+  FileSet::const_iterator iter;
+  for (iter = fileset_->begin(); iter != fileset_->end();) {
+    const Filename* filename = *iter;
+    ++iter;  // Move iter before UnloadFile deletes filename from the set.
+    if (HasPrefixString(filename->Str(), dirname)) {
+      UnloadFile(filename);
+    }
+  }
+}
+
+void TagsTable::UnloadFile(const Filename* filename) {
+  // No such file loaded. We are done.
+  if (loaded_files_->find(filename) == loaded_files_->end()) {
+    return;
+  }
+
+  LOG(INFO) << "Unloading " << filename->Str();
+
+  // Delete from findfilemap_.
+  pair<FindFileMap::iterator, FindFileMap::iterator> iter_ffm =
+      findfilemap_->equal_range(filename->Basename());
+
+  for (FindFileMap::iterator i = iter_ffm.first;
+       i != iter_ffm.second;) {
+    FindFileMap::iterator tmp = i;
+    ++i;
+    if (*(tmp->second) == *(filename)) {
+      findfilemap_->erase(tmp);
+    }
+  }
+
+  // Delete from map_.
+  if (enable_fileindex_) {
+    // Find and delete the right TagResults using filemap_.
+    FileMap::iterator pos = filemap_->find(filename);
+    CHECK(pos != filemap_->end());
+    for (vector<const TagsResult*>::const_iterator i = pos->second.begin();
+        i != pos->second.end(); ++i) {
+      pair<TagMap::iterator, TagMap::iterator> iter_tag =
+          map_->equal_range((*i)->tag);
+      for (TagMap::iterator j = iter_tag.first;
+           j != iter_tag.second;) {
+        TagMap::iterator tmp = j;
+        ++j;
+        if (tmp->second == *i) {
+          map_->erase(tmp);
+          break;
+        }
+      }
+      delete *i;
+    }
+    filemap_->erase(pos);
+  } else {
+    // If the file index is not enabled, we might still want to unload
+    // files when doing an incremental update for example. To do this,
+    // we need to scan through the entire table. This is fairly slow,
+    // but it saves memory over maintaining the file index.
+    // TODO: It might be nice to have an UnloadFiles function that unloads
+    // a list of files and only scans the index once (sort the list).
+    for (TagMap::iterator i = map_->begin(); i != map_->end();) {
+      TagMap::iterator tmp = i;
+      ++i;
+      if (*(tmp->second->filename) == *(filename)) {
+        delete tmp->second;
+        map_->erase(tmp);
+      }
+    }
+  }
+
+  loaded_files_->erase(filename);
 }
 
 int TagsTable::GetTagsFormatVersion(const SExpression* sexp) {
@@ -406,8 +491,8 @@ void TagsTable::ParseHeaderDeclaration(const SExpression* sexp) {
       CHECK(features_iter->IsSymbol())
         << "Expected symbol in feature list.";
 
-      hash_map<const char *, bool, hash<const char *> >::iterator find_iter =
-        features_.find(features_iter->Repr().c_str());
+      hash_map<string, bool>::iterator find_iter =
+        features_.find(features_iter->Repr());
       if (find_iter != features_.end())
         find_iter->second = true;
       else
@@ -418,6 +503,25 @@ void TagsTable::ParseHeaderDeclaration(const SExpression* sexp) {
     LOG(INFO) << "File header contained unrecognized declaration type: "
               << declaration_type->Repr();
   }
+}
+
+void TagsTable::ParseDeletedDeclaration(const SExpression* sexp) {
+  CHECK(sexp->IsList());
+  SExpression::const_iterator sexp_iter = sexp->Begin();
+  const SExpression* declaration_type = &*sexp_iter;
+  ++sexp_iter;
+  CHECK_EQ(declaration_type->Repr(), "deleted");
+  CHECK(sexp_iter != sexp->End())
+    << "Expected parameter(s) to follow declaration type.";
+  const SExpression* declaration_value = &*sexp_iter;
+  CHECK(declaration_value->IsString())
+    << "Expected string after deleted declaration.";
+  const Filename* filename = NULL;
+  filename = FileGet(
+    down_cast<const SExpressionString*>(declaration_value)->value());
+  CHECK_NE(filename, static_cast<Filename*>(NULL))
+    << "Expected a file path inside deleted declaration.";
+  UnloadFile(filename);
 }
 
 void TagsTable::ParseFileDeclaration(const SExpression* sexp) {
@@ -461,6 +565,15 @@ void TagsTable::ParseFileDeclaration(const SExpression* sexp) {
   CHECK_NE(contents_list, static_cast<SExpression*>(NULL))
     << "Expected a contents list inside the file declaration.";
 
+  LOG(INFO) << "Processing " << filename->Str();
+
+  UnloadFile(filename);
+
+  // Add into loaded_files_
+  loaded_files_->insert(filename);
+
+  vector<const TagsResult*> tags_vector;
+
   // Iterate through contents
   for (SExpression::const_iterator lineitem_iter = contents_list->Begin();
        lineitem_iter != contents_list->End();
@@ -477,7 +590,7 @@ void TagsTable::ParseFileDeclaration(const SExpression* sexp) {
 
     map_->insert(make_pair(tag->tag, tag));
     if (enable_fileindex_)
-      filemap_->insert(make_pair(tag->filename, tag));
+      tags_vector.push_back(tag);
     if (GET_FLAG(findfile))
       findfilemap_->insert(make_pair(tag->filename->Basename(), tag->filename));
 
@@ -488,7 +601,12 @@ void TagsTable::ParseFileDeclaration(const SExpression* sexp) {
                               << "Snippet: " << tag->linerep << "\n"
                               << "Filename: " << tag->filename->Str() << "\n"
                               << "Lineno: " << tag->lineno << "\n"
-                              << "Charno: " << tag->charno << "\n";
+                              << "Charno: " << tag->charno;
+  }
+
+  if (enable_fileindex_) {
+    tags_vector.resize(tags_vector.size());
+    filemap_->insert(make_pair(filename, tags_vector));
   }
 }
 
@@ -575,7 +693,8 @@ TagsTable::TagsResult* TagsTable::ParseDescriptorDeclaration(
     else if (descriptor_head->Repr() == "generic-tag")
       retval->type = GENERIC_DEFN;
     else
-      LOG(FATAL) << "Unexpected descriptor type encountered." << descriptor_head->Repr();
+      LOG(FATAL) << "Unexpected descriptor type encountered."
+                 << descriptor_head->Repr();
 
     // TODO(psung): At present we don't know how to do special
     // handling for types, functions, and variables. We just read the
@@ -590,9 +709,8 @@ TagsTable::TagsResult* TagsTable::ParseDescriptorDeclaration(
       ++attr_iter;
       const SExpression* attr_value = &*attr_iter;
 
-      CHECK(attr_value->IsString());
-
       if (attr_name->Repr() == "tag") {
+        CHECK(attr_value->IsString());
         retval->tag = strings_->Get(
             down_cast<const SExpressionString*>(attr_value)->value().c_str());
       }
@@ -602,7 +720,6 @@ TagsTable::TagsResult* TagsTable::ParseDescriptorDeclaration(
   CHECK_NE("", retval->tag) << "Expected non-empty tag name.";
 
   return retval;
-
 }
 
 const string& TagsTable::GetTagNameFromRef(const SExpression* sexp) const {
@@ -711,8 +828,7 @@ bool TagsTable::ContainsRegexpChar(const string& tag) const {
 
 const Filename* TagsTable::FileGet(const string& file_str) {
   Filename file(file_str.c_str(), strings_);
-  hash_set<const Filename*, FileHash, FileEq>::const_iterator
-    iter = fileset_->find(&file);
+  FileSet::const_iterator iter = fileset_->find(&file);
 
   if (iter != fileset_->end())
     return *iter;

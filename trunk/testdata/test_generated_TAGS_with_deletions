@@ -1,0 +1,26 @@
+(tags-format-version 2)
+(tags-comment "")
+(timestamp 1155246407)
+(tags-corpus-name "cpp")
+(features (include-files))
+(file 
+  (path "tools/tags/file1.h")
+  (language "c++")
+  (contents ((item (line 10) (offset 100) (descriptor (generic-tag (tag "file_size"))) (snippet "int file_size;"))
+             (item (line 15) (offset 200) (descriptor (generic-tag (tag "file_name"))) (snippet "string file_name;")))))
+(file 
+  (path "tools/util/file2.h")
+  (language "c++")
+  (contents ((item (line 20) (offset 300) (descriptor (generic-tag (tag "file_name"))) (snippet "string file_name;")))))
+(file 
+  (path "tools/cpp/file3.h")
+  (language "c++")
+  (contents ((item (line 25) (offset 400) (descriptor (generic-tag (tag "TagsReader"))) (snippet "class TagsReader {")))))
+(file 
+  (path "tools/cpp/file4.h")
+  (language "c++")
+  (contents ((item (line 4) (offset 85) (descriptor (include (location user-path) (path "tools/cpp/file3.h"))) (snippet "#include \"tools/cpp/file3.h\""))
+             (item (line 12) (offset 355) (descriptor (variable (tag "FLAGS_sample_flag"))) (snippet "DEFINE_bool(sample_flag, false, \"\");"))
+             (item (line 30) (offset 500) (descriptor (generic-tag (tag "BetterTagsReader"))) (snippet "class BetterTagsReader : public Tagsreader {")))))
+(deleted "tools/tags/file5.cc")
+(deleted "tools/tags/file6.cc")

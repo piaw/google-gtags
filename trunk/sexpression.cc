@@ -23,8 +23,7 @@
 #include "sexpression.h"
 
 // ***** SExpression::const_iterator
-
-SExpression::const_iterator::const_iterator(const SExpression* psexp) {
+SExpressionConstIterator::SExpressionConstIterator(const SExpression* psexp) {
   CHECK(psexp->IsList());
 
   if (psexp->IsNil()) {
@@ -37,15 +36,15 @@ SExpression::const_iterator::const_iterator(const SExpression* psexp) {
   }
 }
 
-const SExpression& SExpression::const_iterator::operator*() const {
+const SExpression& SExpressionConstIterator::operator*() const {
   return *(next_->car());
 }
 
-const SExpression* SExpression::const_iterator::operator->() const {
+const SExpression* SExpressionConstIterator::operator->() const {
   return next_->car();
 }
 
-void SExpression::const_iterator::operator++() {
+void SExpressionConstIterator::operator++() {
   if (!done_) {
     if (next_->cdr()->IsPair()) {
       next_ = down_cast<const SExpressionPair*>(

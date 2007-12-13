@@ -31,7 +31,7 @@ all:
 	\$(SCONS) -Q
 
 clean:
-	\$(SCONS) -c gtags tests
+	\$(SCONS) -c libs bins tests
 
 tests:
 	\$(SCONS) -Q tests

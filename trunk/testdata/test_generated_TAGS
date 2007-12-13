@@ -18,4 +18,6 @@
 (file 
   (path "tools/cpp/file4.h")
   (language "c++")
-  (contents ((item (line 30) (offset 500) (descriptor (generic-tag (tag "BetterTagsReader"))) (snippet "class BetterTagsReader : public Tagsreader {")))))
+  (contents ((item (line 4) (offset 85) (descriptor (include (location user-path) (path "tools/cpp/file3.h"))) (snippet "#include \"tools/cpp/file3.h\""))
+             (item (line 12) (offset 355) (descriptor (variable (tag "FLAGS_sample_flag"))) (snippet "DEFINE_bool(sample_flag, false, \"\");"))
+             (item (line 30) (offset 500) (descriptor (generic-tag (tag "BetterTagsReader"))) (snippet "class BetterTagsReader : public Tagsreader {")))))

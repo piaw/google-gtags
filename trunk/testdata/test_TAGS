@@ -18,5 +18,9 @@
 (file 
   (path "tools/cpp/file4.h")
   (language "c++")
-  (contents ((item (line 30) (offset 500) (descriptor (generic-tag (tag "BetterTagsReader"))) (snippet "class BetterTagsReader : public Tagsreader {")))))
+  (contents ((item (line 30) (offset 500) (descriptor (generic-tag (tag "BetterTagsReader"))) (snippet "class BetterTagsReader : public Tagsreader {"))
+             (item (line 35) (offset 30) 
+                   (descriptor (function (tag "doSomething") (specified-here declaration) (return-type (ref (name "vector<int>")))
+                               (argument-types ((ref (name "int")) (ref (name "string"))))))
+                   (snippet "vector<int> doSomething(int q, string z) {")))))
 

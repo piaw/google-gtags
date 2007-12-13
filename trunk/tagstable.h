@@ -64,18 +64,22 @@ class TagsTable {
   // Stores data associated with a single instance of a tag. Each item
   // descriptor in a file has an associated TagsResult object.
   struct TagsResult {
-    TagType type;              // type of tag
+    TagType type : 16;         // type of tag
+    int charno;                // char offset of beginning of line
+    int lineno;                // line number
     const char* tag;           // tag
     const char* linerep;       // text of line the tag appears on
     const Filename* filename;  // which file
     const char* language;      // file language
-    int lineno;                // line number
-    int charno;                // char offset of beginning of line
   };
 
   // Load the tag file from FILENAME. The file format is described at
   // wiki/Nonconf/GTagsTagsFormat.
   bool ReloadTagFile(const string& filename, bool enable_gunzip);
+
+  // Update the tag file from FILENAME. Only effects entries from files
+  // listed in the input file.
+  bool UpdateTagFile(const string& filename, bool enable_gunzip);
 
   // Accessors to retrieve metadata for the tagsfile.
   const string& GetCommentString() const;
@@ -90,24 +94,25 @@ class TagsTable {
 
   // Return snippet matches
   virtual list<const TagsResult*>* FindSnippetMatches(
-      const string& match,
-      const string& current_file,
-      bool callers) const;
-
+      const string& match, const string& current_file, bool callers,
+      const list<string>* ranking) const;
   // Return regexp matches
-  virtual list<const TagsResult*>* FindRegexpTags(const string& tag,
-                                                  const string& current_file,
-                                                  bool callers) const;
+  virtual list<const TagsResult*>* FindRegexpTags(
+      const string& tag, const string& current_file, bool callers,
+      const list<string>* ranking) const;
   // Return matching tags
-  virtual list<const TagsResult*>* FindTags(const string& tag,
-                                            const string& current_file,
-                                            bool callers) const;
+  virtual list<const TagsResult*>* FindTags(
+      const string& tag, const string& current_file, bool callers,
+      const list<string>* ranking) const;
+
   // Return all tags in a particular file
   list<const TagsResult*>* FindTagsByFile(const string& filename,
                                           bool callers) const;
   // Return all files that have the correct base name
   set<string>* FindFile(const string& filename) const;
 
+  // Unload all files contained in dir.
+  void UnloadFilesInDir(const string& dirname);
  private:
   // Instantiates all needed members. Should be called only once, from
   // the constructor.
@@ -117,6 +122,13 @@ class TagsTable {
   // Clears all data structures and deallocates stored strings, in
   // preparation for destructor or loading a new TAGS file.
   virtual void FreeData();
+
+  // Load the tag file from FILENAME. The file format is described at
+  // wiki/Nonconf/GTagsTagsFormat.
+  bool LoadTagFile(const string& filename, bool enable_gunzip);
+
+  // Unload all tags from the specified file.
+  virtual void UnloadFile(const Filename* filename);
 
   // Helpers for parsing s-expression input from file:
 
@@ -142,6 +154,9 @@ class TagsTable {
   // not represent a tag, returns NULL.
   virtual TagsResult* ParseDescriptorDeclaration(const SExpression* sexp,
                                                  const Filename* filename);
+  // If SEXP is a valid (deleted ...) declaration, parses it and updates
+  // the TagsTable.
+  void ParseDeletedDeclaration(const SExpression* sexp);
   // If sexp is of the form (ref (name "TAGNAME") (id ...)), returns
   // the value of its NAME attribute as a string.
   const string& GetTagNameFromRef(const SExpression* sexp) const;
@@ -202,6 +217,14 @@ class TagsTable {
     }
   };
 
+  // Map and set types for our data structures.
+  typedef hash_set<const Filename*, FileHash, FileEq> FileSet;
+  typedef multimap<const char*, const TagsResult*, StrCompare> TagMap;
+  typedef hash_map<const Filename*, vector<const TagsResult*>, FileHash, FileEq>
+    FileMap;
+  typedef hash_multimap<const char*, const Filename*, hash<const char*>, StrEq>
+    FindFileMap;
+
   // TODO(psung): Storing callers and non-callers in separate data
   // structures might make lookups faster, since we never search for
   // both and always have to filter one of them out.
@@ -209,18 +232,17 @@ class TagsTable {
   // Store all the strings that we use here
   SymbolTable* strings_;
   // Set of all filenames
-  hash_set<const Filename*, FileHash, FileEq>* fileset_;
+  FileSet* fileset_;
+  // Set of all currently indexed filenames
+  FileSet* loaded_files_;
   // Index all tagged lines by tagname. This needs to be not hashed so
   // we can do range queries when we're looking for prefixes.
-  multimap<const char*, const TagsResult*, StrCompare>* map_;
+  TagMap* map_;
   // Index all tagged lines by filename
-  hash_multimap<const Filename*, const TagsResult*, FileHash, FileEq>*
-  filemap_;
+  FileMap* filemap_;
   // Index all files by their basename
-  hash_multimap<const char*, const Filename*, hash<const char*>, StrEq>*
-  findfilemap_;
-  // Allow searching for tags by filename. This can be a big space
-  // hit.
+  FindFileMap* findfilemap_;
+  // Allow searching for tags by filename. This can be a big space hit.
   bool enable_fileindex_;
 
   // Tagsfile metadata
@@ -229,7 +251,7 @@ class TagsTable {
   string corpus_name_;
 
   // Features
-  hash_map<const char*, bool, hash<const char*> > features_;
+  hash_map<string, bool> features_;
 
   // This is to make the transition from etags to new-style tags
   // easier. Under etags, there was no distinction in the file format

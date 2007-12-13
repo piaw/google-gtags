@@ -1,0 +1,32 @@
+;; -*- mode: lisp; -*-
+;; Configuration for opensource gtagsmixer.
+
+(gtags-corpuses "corpus1" "corpus2")
+
+(gtags-languages "c++" "java" "python")
+
+(gtags-borg-language-names ("c++" . "cpp") 
+			   ("java" . "java")
+			   ("python" . "python"))
+
+(gtags-language-has-callgraph ("c++" . t)
+			      ("java" . t)
+			      ("python" . t))
+
+(gtags-language-hostnames
+ ("c++" . "gtags.example.com")
+ ("java" . "gtags.example.com")
+ ("python" . "gtags.example.com"))
+
+(gtags-callgraph-hostnames
+ ("c++" . "gtags.example.com")
+ ("java" . "gtags.example.com")
+ ("python" . "gtags.example.com"))
+
+(gtags-language-ports ("c++" . 2223)
+		      ("java" . 2224)
+		      ("python" . 2225))
+
+(gtags-callgraph-ports ("c++" . 2233)
+		       ("java" . 2234)
+		       ("python" . 2235))

@@ -1,7 +1,7 @@
-;;; Gdoc mode.  This was Piaw's idea and is Arthur's implementation,
+;;; Gdoc mode.  This was Piaw's idea and is Arthur's implementation.
 ;;; Authors: Arthur A. Gleckler, Piaw Na
-;;; Copyright Google Inc. 2005
-;;; inspired by Eldoc mode.
+;;; Copyright Google Inc. 2005-2007
+;;; Inspired by Eldoc mode.
 
 ;;; This program is free software; you can redistribute it and/or
 ;;; modify it under the terms of the GNU General Public License
@@ -18,7 +18,7 @@
 ;;; Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 
-;;; $Id: //depot/opensource/gtags/gdoc-mode.el#4 $
+;;; $Id: //depot/opensource/gtags/gdoc-mode.el#5 $
 
 (require 'gtags)
 
@@ -51,7 +51,7 @@ If this variable is set to 0, no idle time is required."
   :group 'gdoc)
 
 (defcustom gdoc-display-definitions t
-  "*whether or not to display definitions*"
+  "*whether to display definitions*"
   :type 'boolean
   :group 'gdoc)
 
@@ -69,20 +69,21 @@ With zero or negative ARG turn mode off.When gdoc mode is active,
 Emacs continuously looks up the tag under the point."
   nil
   gdoc-minor-mode-string
-  nil)
+  nil
+  (gdoc-set-window)
+  (gdoc-schedule-timer))
 
 (defun gdoc-set-window ()
   (if (not (and (windowp gdoc-display-window)
 		(window-live-p gdoc-display-window)))
-      (setq gdoc-display-window (if gdoc-pop-up-frames
-				    (frame-first-window (make-frame))
-				  (display-buffer "*TAGS*" t t)))))
-
-(add-hook 'gdoc-mode-hook 'gdoc-set-window)
-(add-hook 'gdoc-mode-hook 'gdoc-schedule-timer)
+      (setq gdoc-display-window
+            (if gdoc-pop-up-frames
+                (frame-first-window (make-frame))
+              (display-buffer "*TAGS*" t t)))))
 
 (defun turn-on-gdoc-mode ()
-  "Unequivocally turn on gdoc-mode (see variable documentation)."
+  "Turn on gdoc-mode (see variable documentation).
+Consider adding this to a mode hook, e.g. `java-mode-hook'."
   (interactive)
   (gdoc-mode 1))
 
@@ -99,53 +100,62 @@ Emacs continuously looks up the tag under the point."
     (cancel-timer gdoc-timer)
     (setq gdoc-timer nil)))
 
-(defun class-or-struct-p (matches tag)
-  "Returns the first tag-record if any of the matches represents
-a struct or a class. Note that this is just a heuristic. It will
+(defun class-or-struct (matches tag)
+  "Returns the first tagrecord if any of the matches represents a
+struct or a class.  Note that this is just a heuristic.  It will
 not be correct in all cases."
   (find-if
-   '(lambda (x) (let* ((tagname (tagrecord-tag x))
-		       (data (tagrecord-data x))
-		       (snippet (tagrecord-data-snippet data)))
-		  (and (equal tagname tag)
-		       (string-match (concat "\\(struct\\|class\\) +" tag)
-				     snippet))))
+   (lambda (x) (let* ((tagname (gtags-tagrecord-tag x))
+                      (snippet (gtags-tagrecord-snippet x)))
+                 (and (equal tagname tag)
+                      (string-match (concat "\\(struct\\|class\\) +" tag)
+                                    snippet))))
    matches))
 
 ;; TODO(arthur): Make this asynchronous so that it will never block,
 ;; even if the server is slow or not responding.  So far, this hasn't
 ;; been a problem, but we should anticipate the problem.
 
-(defun google-show-tag-locations-continuous (tagname
-                                             regexp-pred
-                                             opcode
-                                             buffer-name)
-  "Show all matches for `tagname' in a buffer named `buffer-name' in
-another window (or in another frame, if `pop-up-frames' is non-nil).
+(defun gtags-show-gdoc-option-window (matches)
+  (let ((buffer (get-buffer-create display-buffer-name)))
+    (save-excursion
+      (set-window-buffer
+       (gtags-show-tags-option-window-inner
+        matches
+        buffer
+        current-directory
+        (lambda (buffer) gdoc-display-window))
+       buffer))))
 
-`Regexp-pred' is a function that takes a tagrecord and returns non-nil
-if it matches.
-
-`Opcode' specifies which server \"opcode\" operation to perform,
-e.g. `:' for direct tag lookup."
-  (let* ((gtags-server-buffer-name gtags-gdoc-server-buffer-name)
+(defun gtags-show-tag-locations-continuous (tag-name)
+  "Show all matches for `tag-name' in a buffer named \"*Gdoc*\" in
+another window (or in another frame, if `pop-up-frames' is
+non-nil)."
+  (let* ((display-buffer-name "*Gdoc*")
+         (gtags-server-buffer-name gtags-gdoc-server-buffer-name)
 	 (current-directory default-directory)
 	 (matches
-	  (google-get-unique-matches opcode tagname regexp-pred)))
+          (gtags-get-tags
+           'lookup-tag-exact
+           `((tag ,tag-name)
+             (language ,(gtags-guess-language))
+             (callers nil)
+             (current-file ,buffer-file-name))
+           :caller-p nil
+           :ranked-p t
+           :error-if-no-results-p nil)))
     (if (and gdoc-display-definitions
-	     (= (length matches) 1))  ; unique match!
-	   (google-visit-tagrecord (car matches) nil buffer-name)
-      (let ((class-record (class-or-struct-p matches tagname)))
-	(when (and gdoc-display-definitions
-		   class-record)      ;; there's a match for class or struct
-	  (google-visit-tagrecord class-record nil buffer-name))
-	(when (not (zerop (length matches)))
-	  (google-show-tag-locations-inner
-	   matches
-	   tagname
-	   buffer-name
-	   current-directory
-	   gdoc-display-window))))))
+	     (= (length matches) 1))
+        (gtags-visit-tagrecord (car matches) nil display-buffer-name)
+      (flet ((default-show ()
+               (if (not (null matches))
+                   (gtags-show-gdoc-option-window matches))))
+        (if gdoc-display-definitions
+            (let ((class-record (class-or-struct matches tag-name)))
+              (if class-record
+                  (gtags-visit-tagrecord class-record nil display-buffer-name)
+                (default-show)))
+          (default-show))))))
 
 ;; TODO(arthur) Fix: When the pop-up window is first created, it gets
 ;; focus.  I don't know how to fix this, as it seems to be controlled
@@ -155,22 +165,16 @@ e.g. `:' for direct tag lookup."
 (defun gdoc-print-current-tag-info ()
   "Show matches for tag under point."
   (let ((current-frame (selected-frame)))
-    (setq global-frame current-frame)
     (if (and gdoc-mode
 	     (memq major-mode gdoc-mode-list))
-	(let ((pop-up-frames gdoc-pop-up-frames))
-	  (google-show-tag-locations-continuous
-	   (google-find-default-tag)
-	   '(lambda (x) (string-equal tagname (tagrecord-tag x)))
-	   gtags-opcode-exact
-	   "*TAGS*")))
-    (if (google-xemacs)
+	(gtags-show-tag-locations-continuous
+         (gtags-tag-under-cursor)))
+    (if (gtags-xemacs)
 	;; HACK! xemacs does not do save-selected-frame well at all,
-	;; so we have to resort to refocusing to the current-frame
-	;; for some wierd reason this only shows up in Java mode
-	;; save-selected-frame works fine in C++ mode, but
-	;; this hack does not affect c++-mode badly
+	;; so we have to resort to refocusing to the current-frame.
+	;; For some weird reason this only shows up in Java mode.
+	;; `Save-selected-frame' works fine in C++ mode, but this hack
+	;; does not affect c++-mode badly.
 	(focus-frame current-frame))))
-
 
 (provide 'gdoc-mode)

@@ -18,42 +18,50 @@
 //
 // (See comments and description in tagsrequesthandler.h.)
 
+#include "tagsrequesthandler.h"
+
 #include <list>
 #include <map>
 #include <set>
 #include <string>
 
+#include "tagstable.h"
 #include "sexpression.h"
 #include "tagsoptionparser.h"
-#include "tagsrequesthandler.h"
 #include "tagsutil.h"
+#include "queryprofile.h"
+
+using gtags::MutexLock;
 
 // If test mode flag is on, the server will answer 'nil' instead of
 // 't' to the '/' or 'ping' commands, so the clients can know that the
 // server is in testing mode.
 DEFINE_BOOL(test_mode, false, "Enable test mode");
 
-TagsRequestHandler::TagsRequestHandler(string tags_file,
-                                       bool enable_fileindex,
-                                       bool enable_gunzip) {
+SingleTableTagsRequestHandler::SingleTableTagsRequestHandler
+    (string tags_file, bool enable_fileindex, bool enable_gunzip,
+     string corpus_root) {
   tags_table_ = new TagsTable(enable_fileindex);
   CHECK(tags_table_->ReloadTagFile(tags_file, enable_gunzip));
 
-  opcode_handler_
-    = new OpcodeProtocolRequestHandler(enable_fileindex, enable_gunzip);
-  sexp_handler_
-    = new SexpProtocolRequestHandler(enable_fileindex, enable_gunzip);
+  opcode_handler_ = new OpcodeProtocolRequestHandler(enable_fileindex,
+                                                     enable_gunzip,
+                                                     corpus_root);
+  sexp_handler_ = new SexpProtocolRequestHandler(enable_fileindex,
+                                                 enable_gunzip,
+                                                 corpus_root);
 }
 
-TagsRequestHandler::~TagsRequestHandler() {
+SingleTableTagsRequestHandler::~SingleTableTagsRequestHandler() {
   delete tags_table_;
   delete opcode_handler_;
   delete sexp_handler_;
 }
 
-string TagsRequestHandler::Execute(const char* command,
-                                   clock_t* pclock_before_preparing_results,
-                                   struct query_profile* log) {
+string
+SingleTableTagsRequestHandler::Execute(const char* command,
+                                       clock_t* pclock_before_preparing_results,
+                                       struct query_profile* log) {
   // We work by dispatching on protocol, which can be determined by
   // looking at the first character.
   ProtocolRequestHandler* handler
@@ -66,6 +74,17 @@ string TagsRequestHandler::Execute(const char* command,
                           tags_table_,
                           pclock_before_preparing_results,
                           log);
+}
+
+string ProtocolRequestHandler::StripCorpusRoot(const string& path) {
+  if (corpus_root_ == "")
+    return path;
+  string pattern = "/" + corpus_root_ + "/";
+  int pos = path.find(pattern);
+  if (pos != string::npos)
+    return path.substr(pos + pattern.size());
+  else
+    return path;
 }
 
 string OpcodeProtocolRequestHandler::Execute(
@@ -112,6 +131,11 @@ string OpcodeProtocolRequestHandler::Execute(
       output.append(
           tags_table->ReloadTagFile(tag, enable_gunzip_) ? "t" : "nil");
       break;
+    case LOAD_UPDATE_FILE:
+      *pclock_before_preparing_results = clock();
+      output.append(
+          tags_table->UpdateTagFile(tag, enable_gunzip_) ? "t" : "nil");
+      break;
     case FIND_FILE:  // Find file
       file_matches = tags_table->FindFile(tag);
       *pclock_before_preparing_results = clock();
@@ -120,24 +144,26 @@ string OpcodeProtocolRequestHandler::Execute(
     case LOOKUP_TAGS_IN_FILE:  // All tags in file
       *pclock_before_preparing_results = clock();
       if (enable_fileindex_) {
-        tag_matches = tags_table->FindTagsByFile(tag, search_callers);
+        string file = StripCorpusRoot(tag);
+        tag_matches = tags_table->FindTagsByFile(file, search_callers);
         PrintTagsResults(tag_matches, &output);
       } else {
         output.append("nil");
       }
       break;
     case LOOKUP_TAG_PREFIX_REGEXP:  // Prefix regexp
-      tag_matches = tags_table->FindRegexpTags(tag, "", search_callers);
+      tag_matches = tags_table->FindRegexpTags(tag, "", search_callers, NULL);
       *pclock_before_preparing_results = clock();
       PrintTagsResults(tag_matches, &output);
       break;
     case LOOKUP_TAG_SNIPPET_REGEXP:  // Snippet regexp
-      tag_matches = tags_table->FindSnippetMatches(tag, "", search_callers);
+      tag_matches =
+          tags_table->FindSnippetMatches(tag, "", search_callers, NULL);
       *pclock_before_preparing_results = clock();
       PrintTagsResults(tag_matches, &output);
       break;
     case LOOKUP_TAG_EXACT:  // Exact match
-      tag_matches = tags_table->FindTags(tag, "", search_callers);
+      tag_matches = tags_table->FindTags(tag, "", search_callers, NULL);
       *pclock_before_preparing_results = clock();
       PrintTagsResults(tag_matches, &output);
       break;
@@ -202,8 +228,9 @@ string OpcodeProtocolRequestHandler::EscapeQuotes(string s)  {
 }
 
 SexpProtocolRequestHandler::SexpProtocolRequestHandler(bool fileindex,
-                                                       bool gunzip)
-    : ProtocolRequestHandler(fileindex, gunzip) {
+                                                       bool gunzip,
+                                                       string corpus_root)
+    : ProtocolRequestHandler(fileindex, gunzip, corpus_root) {
   server_start_time_ = time(NULL);
   sequence_number_ = 0;
 
@@ -221,6 +248,7 @@ SexpProtocolRequestHandler::SexpProtocolRequestHandler(bool fileindex,
   (*tag_command_map_)["lookup-tag-prefix-regexp"] = LOOKUP_TAG_PREFIX_REGEXP;
   (*tag_command_map_)["lookup-tag-snippet-regexp"] = LOOKUP_TAG_SNIPPET_REGEXP;
   (*tag_command_map_)["lookup-tags-in-file"] = LOOKUP_TAGS_IN_FILE;
+  (*tag_command_map_)["load-update-file"] = LOAD_UPDATE_FILE;
 
   // For each client-type, we translate it into something we can put in the log
   client_code_map_ = new map<string, string>();
@@ -240,13 +268,27 @@ SexpProtocolRequestHandler::~SexpProtocolRequestHandler() {
 }
 
 string SexpProtocolRequestHandler::Execute(
-    const char* command,
+    const char* command_list,
     TagsTable* tags_table,
     clock_t* pclock_before_preparing_results,
     struct query_profile* log) {
+  DefaultTagsResultPredicate predicate;
+  return Execute(command_list,
+                 tags_table,
+                 pclock_before_preparing_results,
+                 log,
+                 &predicate);
+}
+
+string SexpProtocolRequestHandler::Execute(
+    const char* command_list,
+    TagsTable* tags_table,
+    clock_t* pclock_before_preparing_results,
+    struct query_profile* log,
+    const TagsResultPredicate* predicate) {
   // We first use TranslateInput to parse the query and make a
   // TagsQuery struct.
-  TagsQuery query = TranslateInput(command,
+  TagsQuery query = TranslateInput(command_list,
                                    tags_table->SearchCallersByDefault());
 
   string output;
@@ -304,32 +346,47 @@ string SexpProtocolRequestHandler::Execute(
       output.append(
           tags_table->ReloadTagFile(query.file, enable_gunzip_) ? "t" : "nil");
       break;
+    case LOAD_UPDATE_FILE:
+      *pclock_before_preparing_results = clock();
+      output.append(
+          tags_table->UpdateTagFile(query.file, enable_gunzip_) ? "t" : "nil");
+      break;
     case LOOKUP_TAGS_IN_FILE:
       *pclock_before_preparing_results = clock();
-      if (enable_fileindex_) {
-        tag_matches = tags_table->FindTagsByFile(query.file, query.callers);
-        PrintTagsResults(tag_matches, &output);
+      if (enable_fileindex_ && query.file != "") {
+        tag_matches = tags_table->FindTagsByFile(StripCorpusRoot(query.file),
+                                                 query.callers);
+        PrintTagsResults(tag_matches, &output, predicate);
       } else {
         output.append("nil");
       }
       break;
     case LOOKUP_TAG_PREFIX_REGEXP:
       tag_matches
-        = tags_table->FindRegexpTags(query.tag, query.file, query.callers);
+        = tags_table->FindRegexpTags(query.tag,
+                                     StripCorpusRoot(query.file),
+                                     query.callers,
+                                     &query.ranking);
       *pclock_before_preparing_results = clock();
-      PrintTagsResults(tag_matches, &output);
+      PrintTagsResults(tag_matches, &output, predicate);
       break;
     case LOOKUP_TAG_SNIPPET_REGEXP:
       tag_matches
-        = tags_table->FindSnippetMatches(query.tag, query.file, query.callers);
+        = tags_table->FindSnippetMatches(query.tag,
+                                         StripCorpusRoot(query.file),
+                                         query.callers,
+                                         &query.ranking);
       *pclock_before_preparing_results = clock();
-      PrintTagsResults(tag_matches, &output);
+      PrintTagsResults(tag_matches, &output, predicate);
       break;
     case LOOKUP_TAG_EXACT:
       tag_matches
-        = tags_table->FindTags(query.tag, query.file, query.callers);
+        = tags_table->FindTags(query.tag,
+                               StripCorpusRoot(query.file),
+                               query.callers,
+                               &query.ranking);
       *pclock_before_preparing_results = clock();
-      PrintTagsResults(tag_matches, &output);
+      PrintTagsResults(tag_matches, &output, predicate);
       break;
     default:
       *pclock_before_preparing_results = clock();
@@ -346,7 +403,8 @@ string SexpProtocolRequestHandler::Execute(
 
 void SexpProtocolRequestHandler::PrintTagsResults(
     list<const TagsTable::TagsResult*>* matches,
-    string* output) {
+    string* output,
+    const TagsResultPredicate* predicate) {
   // output format:
   // (((tag T) (snippet S) (filename F) (lineno L) (offset C)
   //            (directory-distance D)) ...)
@@ -354,6 +412,10 @@ void SexpProtocolRequestHandler::PrintTagsResults(
   for (list<const TagsTable::TagsResult*>::const_iterator i = matches->begin();
        i != matches->end();
        ++i) {
+    if (!predicate->Test(*i)) {
+      continue;
+    }
+
     output->push_back('(');
     output->append("(tag \"");
     output->append(CEscape((*i)->tag));
@@ -376,10 +438,9 @@ void SexpProtocolRequestHandler::PrintTagsResults(
 }
 
 SexpProtocolRequestHandler::TagsQuery
-SexpProtocolRequestHandler::TranslateInput(const char* command,
+SexpProtocolRequestHandler::TranslateInput(const char* command_list_string,
                                            bool default_callers_value) {
-  SExpression* command_list = SExpression::Parse(command);
-
+  SExpression* command_list = SExpression::Parse(command_list_string);
   SexpProtocolRequestHandler::TagsQuery query;
 
   query.client_type = "Unknown";
@@ -439,7 +500,18 @@ SexpProtocolRequestHandler::TranslateInput(const char* command,
             for (; attribute_iter != iter->End(); ++attribute_iter) {
               const SExpression* value = &(*attribute_iter);
 
-              if (value->IsString()) {
+              if (value->IsList()) {
+                if (name == "ranking-methods") {
+                  // We only read the head of each ranking-method; the rest of
+                  // the list, if it exists is ignored. They may someday be
+                  // used to pass additional parameters to alter the ranking.
+                  SExpression::const_iterator method_iter = value->Begin();
+                  if (method_iter != value->End() && method_iter->IsSymbol()) {
+                    LOG(INFO) << method_iter->Repr();
+                    query.ranking.push_back(method_iter->Repr());
+                  }
+                }
+              } else if (value->IsString()) {
                 string value_str
                   = down_cast<const SExpressionString*>(value)->value();
                 if (name == "language")
@@ -450,7 +522,6 @@ SexpProtocolRequestHandler::TranslateInput(const char* command,
                   query.file = value_str;
                 else if (name == "client-type")
                   query.client_type = value_str;
-
               } else if (value->IsInteger()) {
                 int value_int
                   = down_cast<const SExpressionInteger*>(value)->value();
@@ -458,7 +529,6 @@ SexpProtocolRequestHandler::TranslateInput(const char* command,
                   query.client_version = value_int;
                 else if (name == "protocol-version")
                   query.protocol_version = value_int;
-
               } else if (name == "callers" && !value->IsNil()) {
                 query.callers = true;
               }
@@ -472,4 +542,43 @@ SexpProtocolRequestHandler::TranslateInput(const char* command,
   delete command_list;
 
   return query;
+}
+
+LocalTagsRequestHandler::LocalTagsRequestHandler(bool fileindex, bool gunzip,
+                                                 string corpus_root) {
+  tags_table_ = new TagsTable(fileindex);
+  sexpr_handler_ = new SexpProtocolRequestHandler(fileindex, gunzip,
+                                                  corpus_root);
+}
+
+LocalTagsRequestHandler::~LocalTagsRequestHandler() {
+  delete tags_table_;
+  delete sexpr_handler_;
+}
+
+string LocalTagsRequestHandler::Execute(const char* command,
+                                        const string& language,
+                                        const string& client_path) {
+  // TODO(stephenchen): It is currently meaningless to profile local tags
+  // requests because there is no way to collect the data from all the users'
+  // workstations and analyze them as a whole. We might want to implement a log
+  // server later so that each local GTags server can upload its stats every
+  // 24 hours or so.
+  clock_t clock;
+  struct query_profile profile;
+
+  LanguageClientTagsResultPredicate predicate(language, client_path);
+  MutexLock lock(&mu_);
+  return sexpr_handler_->Execute(command, tags_table_, &clock, &profile,
+                                 &predicate);
+}
+
+void LocalTagsRequestHandler::Update(const string& filename) {
+  MutexLock lock(&mu_);
+  tags_table_->UpdateTagFile(filename, false);
+}
+
+void LocalTagsRequestHandler::UnloadFilesInDir(const string& dirname) {
+  MutexLock lock(&mu_);
+  tags_table_->UnloadFilesInDir(dirname);
 }

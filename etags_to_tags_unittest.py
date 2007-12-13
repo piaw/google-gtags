@@ -74,7 +74,8 @@ class EtagsToTagsUnitTest(unittest.TestCase):
       "c++",  # language
       "testdata/tags_file_root",  # base_path
       True,  # callers
-      "cppcallers")
+      "cppcallers",
+      None)
     filein.close()
     fileout.close()
 

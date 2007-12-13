@@ -16,17 +16,23 @@
 //
 // Author: psung@google.com (Phil Sung)
 
+#include "symboltable.h"
+
 #include <ext/hash_set>
 #include <utility>
 
-#include "symboltable.h"
+#include "stl_util.h"
 
 SymbolTable::SymbolTable()
     : table_(new hash_set<const char*, hash<const char*>, StrEq>()) { }
 
 SymbolTable::~SymbolTable() {
-  FreeData();
+  Clear();
   delete table_;
+}
+
+void SymbolTable::Clear() {
+  STLDeleteArrayContainer(table_);
 }
 
 const char* SymbolTable::Get(const char* str)  {
@@ -47,20 +53,4 @@ const char* SymbolTable::Get(const char* str)  {
   } else {
     return *elt;
   }
-}
-
-void SymbolTable::FreeData() {
-  hash_set<const char*, hash<const char*>, StrEq>::iterator iter
-    = table_->begin();
-  while (iter != table_->end()) {
-    // Deleting an element invalidates iterators that point at that
-    // element, so we need to advance the iterator before we delete
-    // the element. This is the same as STLDeleteContainerPointers
-    // except that it uses delete[] instead of delete.
-    hash_set<const char*, hash<const char*>, StrEq>::iterator temp = iter;
-    ++iter;
-    delete[] *temp;
-  }
-
-  table_->clear();
 }

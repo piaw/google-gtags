@@ -7,9 +7,9 @@ Build Requirement
 
 Build Instruction
 
-To build GTags server, do
+To build GTags server, mixer, and watcher, do
 
-$ cd gtags-1.0
+$ cd google-gtags-2.0.0
 $ ./configure
 $ make
 
@@ -31,8 +31,10 @@ Recommended Deployment
 
    1. Checkout complete source tree nightly from your repository.
    2. Invoke gentags with: gentags.py --etags=/path/to/etags --rtags=/path/to/rtags.py --etags_to_tags=/path/to/etags_to_tags.py
-   3. For each generated {cpp|java|python}[{.callers}].tags.gz for, start a instance of gtags server.
-   4. Edit gtags.el and gtags.py respectively so emacs and python clients know where the servers are.
-   5. Load gtags.el and gtags.vim in emacs and python respectively. 
+   3. For each generated {cpp|java|python}[{.callers}].tags.gz, start a instance of gtags server.
+   4. Edit gtags.el, gtags.py and gtagsmixer_socket_config respectively so emacs and python clients and the mixer know where the servers are.
+   5. Edit gtags.el and gtags.py respectively so emacs and python clients know the location of the mixer.
+   6. Load gtags.el and gtags.vim in emacs and python respectively.
+   7. Use the watcher to specify watch folders for the mixer.
 
 We recommend you repeat step 1 and 2 nightly. If you have gtags servers running, you can instruct them to load the new tags file by sending them reload-tags-file command. See GTagsProtocol for more details.

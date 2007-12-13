@@ -78,7 +78,7 @@ def main():
   ofile = open(options.output, writemode)
   sys.stdout = ofile
 
-  for filename in argv[1:]:
+  for filename in argv:
     lineno = 1
     offset = 0
     try:

@@ -1,0 +1,18 @@
+(tags-format-version 2)
+(tags-comment "")
+(timestamp 1194921381)
+(tags-corpus-name "google3")
+(features (callers include-files))
+(file 
+  (path "/home/nigdsouza/gtags-deps-alt/google3/tools/tags/testdata/test_code.cc")
+  (language "c++")
+  (contents ((item (line 9) (offset 217) (descriptor (call (to (ref (name "HelloWorld"))))) (snippet "void HelloWorld(const char* name) {"))
+             (item (line 10) (offset 252) (descriptor (call (to (ref (name "LOG"))))) (snippet "  LOG(INFO) << \"Hello World, \" << name << '\\n';"))
+             (item (line 13) (offset 300) (descriptor (call (to (ref (name "main"))))) (snippet "int main(int argc, char **argv) {"))
+             (item (line 14) (offset 333) (descriptor (call (to (ref (name "ParseArgs"))))) (snippet "  ParseArgs(argc, argv);"))
+             (item (line 15) (offset 357) (descriptor (call (to (ref (name "HelloWorld"))))) (snippet "  HelloWorld(argv[1]);")))))
+(file 
+  (path "/home/nigdsouza/gtags-deps-alt/google3/tools/tags/testdata/test_code.py")
+  (language "python")
+  (contents ((item (line 12) (offset 181) (descriptor (call (to (ref (name "HelloWorld"))))) (snippet "def HelloWorld(name):"))
+             (item (line 17) (offset 310) (descriptor (call (to (ref (name "HelloWorld"))))) (snippet "  HelloWorld(sys.argv[1])")))))

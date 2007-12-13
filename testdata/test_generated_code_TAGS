@@ -1,0 +1,14 @@
+(tags-format-version 2)
+(tags-comment "")
+(timestamp 1194921416)
+(tags-corpus-name "google3")
+(features (include-files))
+(file 
+  (path "/home/nigdsouza/gtags-deps-alt/google3/tools/tags/testdata/test_code.cc")
+  (language "c++")
+  (contents ((item (line 9) (offset 225) (descriptor (generic-tag (tag "HelloWorld"))) (snippet "void HelloWorld(const char* name) {"))
+             (item (line 13) (offset 312) (descriptor (generic-tag (tag "main"))) (snippet "int main(int argc, char **argv) {")))))
+(file 
+  (path "/home/nigdsouza/gtags-deps-alt/google3/tools/tags/testdata/test_code.py")
+  (language "python")
+  (contents ((item (line 12) (offset 192) (descriptor (generic-tag (tag "HelloWorld"))) (snippet "def HelloWorld(name):")))))

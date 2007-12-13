@@ -60,8 +60,21 @@ option_parser.add_option(
   "--language",
   dest="language",
   default="c++",
-  help="Language to apply to this TAGS file.")
-
+  help="Language to apply to this TAGS file. This option is supressed when"
+  "--guess_language mode is enabled")
+option_parser.add_option(
+  "--guess_language",
+  dest="guess_language",
+  default=False,
+  action="store_true",
+  help="etags_to_tags will attempt to guess the language based on file "
+  "extension when this flag is enabled. This has precedence over --language. "
+  "We fall back to --language when we do not recognize the file extension.")
+option_parser.add_option(
+  "--deletion_list",
+  dest="deletion_list",
+  default=None,
+  help="List of files to output as deleted.")
 # When True, we make a (call ...) descriptor for each tag rather than
 # a (generic-tag ...) descriptor.
 option_parser.add_option(
@@ -70,12 +83,29 @@ option_parser.add_option(
   default=False,
   action="store_true",
   help="Flag the TAGS file as including callers.")
-
 option_parser.add_option(
   "--nocallers",
   dest="callers",
   action="store_false",
   help="Flag the TAGS file as not including callers.")
+option_parser.add_option(
+  "--noheader",
+  dest="header",
+  default=True,
+  action="store_false",
+  help="Do not output the TAGS header.")
+
+(options, args) = option_parser.parse_args()
+
+extension_map = {
+  ".cc"              : "c++",
+  ".cpp"             : "c++",
+  ".c"               : "c++",
+  ".h"               : "c++",
+  ".lex"             : "c++",
+  ".java"            : "java",
+  ".py"              : "python",
+  }
 
 def string_lisp_repr(string):
   """
@@ -85,11 +115,24 @@ def string_lisp_repr(string):
   """
   retval = '"'
   for c in string:
-    if c == '\\' or c == '"':
-      retval += '\\'
-    retval += c
+    if c != '\0':
+      if c == '\\' or c == '"':
+        retval += '\\'
+      retval += c
+    else:
+      # Just ignore strings which contain null's.
+      # It may be good to output a warning here.
+      return '""'
   retval += '"'
   return retval
+
+def guess_language(filename, default):
+  """
+  Guess programming language using file extension.
+  """
+  if options.guess_language:
+    return extension_map.get(os.path.splitext(filename)[1], default)
+  return default
 
 def write_tagged_lines(filename, tagged_lines, outfile, language, base_path):
   """
@@ -99,6 +142,7 @@ def write_tagged_lines(filename, tagged_lines, outfile, language, base_path):
 
   LANGUAGE and BASE_PATH correspond to the flags of the same name.
   """
+  language = guess_language(filename, language)
   outfile.write('(file \n  (path %s)\n  (language %s)\n  (contents (' %
                 (string_lisp_repr(filename), string_lisp_repr(language)))
 
@@ -108,38 +152,41 @@ def write_tagged_lines(filename, tagged_lines, outfile, language, base_path):
   fileoffset = 0
   # Open the specified file and look for references
 
-  first_line = True
+  is_first_line = True
   for [lineno, charno, descriptor, snippet] in tagged_lines:
-    if not first_line:
+    if not is_first_line:
       outfile.write('\n             ')
-    first_line = False
+    is_first_line = False
     outfile.write('(item (line %s) (offset %s) (descriptor %s) (snippet %s))' %
                   (lineno, charno, descriptor, string_lisp_repr(snippet)))
   outfile.write(')))\n')
 
 
-def write_tags_file(infile, outfile, language, base_path, callers, corpus_name):
+def write_tags_file(infile, outfile, language, base_path, callers, corpus_name,
+                    deletion_list_filename):
   """
   Reads INFILE (etags format tags file), converts it to new-style TAGS
   and writes that to OUTFILE.
 
-  LANGUAGE, BASE_PATH, CALLERS, and CORPUS_NAME correspond to the
-  flags of the same name.
+  LANGUAGE, BASE_PATH, CALLERS, CORPUS_NAME and DELETION_LIST
+  correspond to the flags of the same name.
   """
-  callers_feature_string = ""
-  if callers:
-    callers_feature_string = "callers "
 
   # Write file header
-  outfile.write('(tags-format-version 2)\n')
-  outfile.write('(tags-comment "")\n')
-  outfile.write('(timestamp %s)\n' % int(time.time()))
-  outfile.write('(tags-corpus-name %s)\n' % string_lisp_repr(corpus_name))
+  if options.header:
+    outfile.write('(tags-format-version 2)\n')
+    outfile.write('(tags-comment "")\n')
+    outfile.write('(timestamp %s)\n' % int(time.time()))
+    outfile.write('(tags-corpus-name %s)\n' % string_lisp_repr(corpus_name))
 
   filename = None
 
   # Read tags from file
   for line in infile:
+    # If we read an empty line (not even including \n), then we have been
+    # given an empty tags file or we are at EOF, so return.
+    if line == "":
+      break
     line = line[:-1]
     if line == "\014":  # "^L"
       # Next line contains a file header containing the filename
@@ -148,7 +195,8 @@ def write_tags_file(infile, outfile, language, base_path, callers, corpus_name):
       if file_line:
         # Reading file header. Flush entries from last file first, if possible.
         if filename:
-          write_tagged_lines(filename, tagged_lines, outfile, language, base_path)
+          write_tagged_lines(filename, tagged_lines, outfile, language,
+                             base_path)
         [filename, structure_size] = line.split(",")
         tagged_lines = []
       else:
@@ -170,13 +218,19 @@ def write_tags_file(infile, outfile, language, base_path, callers, corpus_name):
                              entry_template % string_lisp_repr(tag),
                              snippet])
       file_line = False
+
   # Flush output again
   if filename:
     write_tagged_lines(filename, tagged_lines, outfile, language, base_path)
 
+  # Write deleted files
+  if deletion_list_filename:
+    deletion_file = open(deletion_list_filename, "r")
+    for line in deletion_file:
+      outfile.write("(deleted %s)\n" % string_lisp_repr(line[:-1]))
+
 
 def main():
-  (options, args) = option_parser.parse_args()
   if options.input_file == "-":
     infile = sys.stdin
   else:
@@ -191,7 +245,8 @@ def main():
                   options.language,
                   options.base_path,
                   options.callers,
-                  options.corpus_name)
+                  options.corpus_name,
+                  options.deletion_list)
 
   infile.close()
   outfile.close()

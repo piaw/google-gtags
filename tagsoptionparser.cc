@@ -27,6 +27,11 @@ StringOptions & string_options() {
   return options;
 }
 
+MultiStringOptions & multistring_options() {
+  static MultiStringOptions options;
+  return options;
+}
+
 IntegerOptions & integer_options() {
   static IntegerOptions options;
   return options;
@@ -43,6 +48,15 @@ namespace {
 string usage_message;
 }
 
+ostream& operator<<(ostream &os, const list<string>& strings) {
+  list<string>::const_iterator iter = strings.begin();
+  if (iter != strings.end())
+    os << *iter++;
+  for (; iter != strings.end(); ++iter)
+    os << ", " << *iter;
+  return os;
+}
+
 using namespace tools_tags_tagsoptionparser;
 
 // Iterate through all the flags and print help messages
@@ -51,6 +65,12 @@ void PrintUsage() {
        i != string_options().end(); ++i) {
     cerr << "\t-" << i->first << " (" << i->second.second
               << ") type: string default: " << i->second.first << endl;
+  }
+
+  for (MultiStringOptions::const_iterator i = multistring_options().begin();
+       i != multistring_options().end(); ++i) {
+    cerr << "\t-" << i->first << " (" << i->second.second
+              << ") type: multistring default: " << i->second.first << endl;
   }
 
   for (IntegerOptions::const_iterator i = integer_options().begin();
@@ -67,7 +87,7 @@ void PrintUsage() {
 
 }
 
-// Parse commandline arguements. Accepts the following formats:
+// Parse commandline arguments. Accepts the following formats:
 //   -option=value
 //   --option=value
 //   -boolean_option
@@ -75,6 +95,7 @@ void PrintUsage() {
 //   -non_boolean_option value
 //   --non_boolean_option value
 void ParseArgs(int argc, char ** argv) {
+  cerr << boolean_options().size() << endl;
   int i = 1; //argv[0] is the command name
   char buf[256];
   while (i < argc) {
@@ -108,15 +129,29 @@ void ParseArgs(int argc, char ** argv) {
       //option should be in one of the 3 sets
       StringOptions::iterator iter_str = string_options().find(option_name);
       if (iter_str != string_options().end()) {
-        if (arg) { //if we already extracted the argument, use it
+        if (arg) {  // If we already extracted the argument, use it.
           iter_str->second.first = string(arg);
         } else {
-          if (i >= argc) {
-            // missing argument
+          if (i >= argc) {  // Missing argument.  Print error and quit
             PrintUsage();
             exit(-1);
           }
           iter_str->second.first = string(argv[i++]);
+        }
+        continue;  // We've processed the argument, move on to the next one.
+      }
+
+      MultiStringOptions::iterator iter_multistr =
+          multistring_options().find(option_name);
+      if (iter_multistr != multistring_options().end()) {
+        if (arg) {
+          iter_multistr->second.first.push_back(string(arg));
+        } else {
+          if (i >= argc) {
+            PrintUsage();
+            exit(-1);
+          }
+          iter_multistr->second.first.push_back(string(argv[i++]));
         }
         continue;
       }

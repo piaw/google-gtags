@@ -39,7 +39,7 @@ class SymbolTable {
   ~SymbolTable();
 
   // Empties the table, deallocating all strings stored inside.
-  void Clear() { FreeData(); }
+  void Clear();
 
   // Adds STR to the table if it's not already present, and returns a
   // pointer to it. If STR is not already in the table, then the
@@ -54,9 +54,6 @@ class SymbolTable {
       return !strcmp(s1, s2);
     }
   };
-
-  // Deallocates all stored strings and empties the set.
-  void FreeData();
 
   hash_set<const char*, hash<const char*>, StrEq>* table_;
 

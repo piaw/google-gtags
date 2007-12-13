@@ -16,7 +16,9 @@
 //
 // Author: stephenchen@google.com (Stephen Chen)
 
-#include "tagsutil.h"
+#include "strutil.h"
+
+#include <ext/hash_map>
 
 const string & CEscape(const string & src_string) {
   static string buffer;
@@ -72,6 +74,9 @@ string FastItoa(int i) {
   return string(p, local + sizeof(local));
 }
 
+size_t __gnu_cxx::hash<string>::operator() (const string& s) const {
+  return __gnu_cxx::hash<const char*>()(s.c_str());
+}
 
 bool IsIntToken(const char* src) {
   // Skip sign if there is one

@@ -19,7 +19,7 @@
 #ifndef TOOLS_TAGS_TAGSUTIL_H__
 #define TOOLS_TAGS_TAGSUTIL_H__
 
-#include "tags_logger.h"
+#include "logging.h"
 
 using namespace std;
 using namespace __gnu_cxx;
@@ -38,14 +38,15 @@ class LogMessageExiter {
   LogMessageExiter() { }
   // This has to be an operator with a precedence lower than << but
   // higher than ?:
-  void operator&(ostream& o) { o.flush(); exit(-1); }
+  void operator&(ostream& o) { o << endl; o.flush(); exit(-1); }
 };
 
 }
 
 #undef CHECK
 #define CHECK(condition) \
-(condition) ? (void) 0 : LogMessageExiter() & LOG(FATAL) << "CHECK Failed: " #condition
+(condition) ? (void) 0 : \
+LogMessageExiter() & LOG(FATAL) << "CHECK Failed: " #condition
 
 #undef CHECK_NE
 #define CHECK_NE(a, b) \

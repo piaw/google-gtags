@@ -1,4 +1,4 @@
-// Copyright 2007 Google Inc. All Rights Reserved.
+// Copyright 2006 Google Inc. All Rights Reserved.
 //
 // This program is free software; you can redistribute it and/or
 // modify it under the terms of the GNU General Public License
@@ -14,122 +14,123 @@
 // along with this program; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 //
-// Author: stephenchen@google.com (Stephen Chen)
-//
-// Note: This file is branched from unittest of the same name
-// in google3/tools/tags. Unless a change is specific for the
-// open source version of the unittest, please make changes to
-// the file in google3/tools/tags and downintegrate. 
+// Author: psung@google.com (Phil Sung)
 
+#include "gtagsunit.h"
 #include "filename.h"
-#include "test_incl.h"
 
-BOOST_AUTO_UNIT_TEST(FilenameTest_SymbolTableConstructor) {
+#include "symboltable.h"
+
+namespace {
+
+TEST(FilenameTest, SymbolTableConstructor) {
   SymbolTable table;
   Filename f1("tools/tags/file.cc", &table);
-  BOOST_CHECK_EQUAL("tools/tags/file.cc", f1.Str());
+  EXPECT_EQ("tools/tags/file.cc", f1.Str());
   Filename f2("tools/tags/", &table);
-  BOOST_CHECK_EQUAL("tools/tags/", f2.Str());
+  EXPECT_EQ("tools/tags/", f2.Str());
 }
 
-BOOST_AUTO_UNIT_TEST(FilenameTest_SymbolTableCopyConstructor) {
+TEST(FilenameTest, SymbolTableCopyConstructor) {
   SymbolTable table;
   // Check that copy constructor works and that data is actually
   // copied, not aliased
   Filename* f1(new Filename("tools/tags/file.cc", &table));
   Filename* f2(new Filename(*f1));
   delete f1;
-  BOOST_CHECK_EQUAL("tools/tags/file.cc", f2->Str());
+  EXPECT_EQ("tools/tags/file.cc", f2->Str());
   delete f2;
 }
 
-BOOST_AUTO_UNIT_TEST(FilenameTest_NoSymbolTableConstructor) {
+TEST(FilenameTest, NoSymbolTableConstructor) {
   Filename f1("tools/tags/file.cc");
-  BOOST_CHECK_EQUAL("tools/tags/file.cc", f1.Str());
+  EXPECT_EQ("tools/tags/file.cc", f1.Str());
   Filename f2("tools/tags/");
-  BOOST_CHECK_EQUAL("tools/tags/", f2.Str());
+  EXPECT_EQ("tools/tags/", f2.Str());
 }
 
-BOOST_AUTO_UNIT_TEST(FilenameTest_NoSymbolTableCopyConstructor) {
+TEST(FilenameTest, NoSymbolTableCopyConstructor) {
   // Check that copy constructor works and that data is actually
   // copied, not aliased
   Filename* f1(new Filename("tools/tags/file.cc"));
   Filename* f2(new Filename(*f1));
   delete f1;
-  BOOST_CHECK_EQUAL("tools/tags/file.cc", f2->Str());
+  EXPECT_EQ("tools/tags/file.cc", f2->Str());
   delete f2;
 }
 
-BOOST_AUTO_UNIT_TEST(FilenameTest_RemoveDotDirectories) {
+TEST(FilenameTest, RemoveDotDirectories) {
   SymbolTable table;
   Filename f1("./tools/tags/./file.cc", &table);
 
-  BOOST_CHECK_EQUAL("tools/tags/file.cc", f1.Str());
+  EXPECT_EQ("tools/tags/file.cc", f1.Str());
 }
 
-BOOST_AUTO_UNIT_TEST(FilenameTest_RootDirectory) {
+TEST(FilenameTest, RootDirectory) {
   SymbolTable table;
   Filename f1(".", &table);
-  BOOST_CHECK_EQUAL(".", f1.Str());
+  EXPECT_EQ(".", f1.Str());
   Filename f2("./.", &table);
-  BOOST_CHECK_EQUAL(".", f1.Str());
+  EXPECT_EQ(".", f1.Str());
 }
 
-BOOST_AUTO_UNIT_TEST(FilenameTest_DirectoryDistance) {
+TEST(FilenameTest, DirectoryDistance) {
   SymbolTable table;
   Filename f1(".", &table);
   Filename f2("a1/a2/b1/b2/b3/file.cc", &table);
   Filename f3("a1/a2/c1/c2/c3/c4/file.cc", &table);
 
-  BOOST_CHECK_EQUAL(5, f2.DistanceTo(f1));
-  BOOST_CHECK_EQUAL(5, f1.DistanceTo(f2));
-  BOOST_CHECK_EQUAL(7, f2.DistanceTo(f3));
-  BOOST_CHECK_EQUAL(7, f3.DistanceTo(f2));
+  EXPECT_EQ(5, f2.DistanceTo(f1));
+  EXPECT_EQ(5, f1.DistanceTo(f2));
+  EXPECT_EQ(7, f2.DistanceTo(f3));
+  EXPECT_EQ(7, f3.DistanceTo(f2));
 }
 
-BOOST_AUTO_UNIT_TEST(FilenameTest_LessthanOperator) {
+TEST(FilenameTest, LessthanOperator) {
   SymbolTable table;
   Filename f1("tools/tags/file.cc", &table);
   Filename f2("tools/tags/file.h", &table);
-  BOOST_CHECK(f1 < f2);
-  BOOST_CHECK_FALSE(f2 < f1);
+  EXPECT_TRUE(f1 < f2);
+  EXPECT_FALSE(f2 < f1);
 
   Filename f3("tools/tags/file.c");
   Filename f4("tools/tags/file.cc");
-  BOOST_CHECK(f3 < f4);
-  BOOST_CHECK_FALSE(f4 < f3);
+  EXPECT_TRUE(f3 < f4);
+  EXPECT_FALSE(f4 < f3);
 
   Filename f5("tools/tags/file.cc", &table);
   Filename f6("tools/tags/file.h");
-  BOOST_CHECK(f5 < f6);
-  BOOST_CHECK_FALSE(f6 < f5);
+  EXPECT_TRUE(f5 < f6);
+  EXPECT_FALSE(f6 < f5);
 }
 
-BOOST_AUTO_UNIT_TEST(FilenameTest_EqualityOperator) {
+TEST(FilenameTest, EqualityOperator) {
   SymbolTable table;
   Filename f1("tools/tags/file.cc", &table);
   Filename f2("tools/tags/file.cc");
   Filename f3("tools/tags/file.h", &table);
 
   // f1 ought to not equal f2 for our test to be meaningful
-  BOOST_CHECK_NOT_EQUAL(&f1, &f2);
+  EXPECT_NE(&f1, &f2);
 
-  BOOST_CHECK(f1 == f1);
-  BOOST_CHECK(f1 == f2);
+  EXPECT_TRUE(f1 == f1);
+  EXPECT_TRUE(f1 == f2);
 
-  BOOST_CHECK(f1 != f3);
-  BOOST_CHECK(f2 != f3);
+  EXPECT_TRUE(f1 != f3);
+  EXPECT_TRUE(f2 != f3);
 }
 
-BOOST_AUTO_UNIT_TEST(FilenameTest_Basename) {
+TEST(FilenameTest, Basename) {
   SymbolTable table;
 
   Filename f1("tools/tags/file.cc", &table);
-  BOOST_CHECK_STREQUAL(f1.Basename(), "file.cc");
+  EXPECT_STREQ(f1.Basename(), "file.cc");
   Filename f2("tools/tags/", &table);
-  BOOST_CHECK_STREQUAL(f2.Basename(), "tags");
+  EXPECT_STREQ(f2.Basename(), "tags");
   Filename f3(".");
-  BOOST_CHECK_EQUAL(f3.Basename(), static_cast<const char*>(NULL));
+  EXPECT_EQ(f3.Basename(), static_cast<const char*>(NULL));
   Filename f4("////", &table);
-  BOOST_CHECK_EQUAL(f4.Basename(), static_cast<const char*>(NULL));
+  EXPECT_EQ(f4.Basename(), static_cast<const char*>(NULL));
 }
+
+}  // namespace

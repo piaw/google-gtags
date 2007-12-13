@@ -107,66 +107,21 @@
 
 #include <string>
 
-#include "strutil.h"
+#include "iterators.h"
 #include "tagsutil.h"
 
 // Need forward declaration for Pair since it's used in the internal
 // representation of SExpression::const_iterator
 class SExpressionPair;
 
+// Need forward declaration for typedef
+class SExpressionConstIterator;
+
 // SExpression is an abstract class, instances of which represent a
 // single s-expression. It is the superclass for all classes
 // representing specific types of s-exps.
 class SExpression {
  public:
-  // const_iterator supports one-way read-only iteration. If psexp
-  // points to a list, the iter goes to each SExpression in the list,
-  // in order.
-  //
-  // Sample usage:
-  //
-  // for(SExpression::const_iterator iter = my_list->Begin();
-  //     iter != my_list->End();
-  //     ++iter)
-  //   str.append(iter->Repr());
-  class const_iterator {
-   public:
-    // Construct an iterator for the given list, provided this
-    // SExpression is actually a list
-    explicit const_iterator(const SExpression* psexp);
-    // Construct an empty iterator (useful for generating sexp.End())
-    explicit const_iterator() : next_(NULL), done_(true) {}
-
-    // Dereference pointer to current SExpression
-    const SExpression& operator*() const;
-    const SExpression* operator->() const;
-
-    // Support == and != for use in for-loop constructs
-    inline bool operator==(const const_iterator& iter) const {
-      return (done_ == iter.done_) && (next_ == iter.next_);
-    }
-
-    inline bool operator!=(const const_iterator& iter) const {
-      return !(*this == iter);
-    }
-
-    // Pre-increment advances to next element
-    void operator++();
-
-   private:
-    // The iterator holds on to the SExpressionPair whose car is the
-    // next item, and advances to the cdr with each increment.
-
-    // Stores the next item we want to visit, if there are items left
-    const SExpressionPair* next_;
-    // True when there are no more items
-    bool done_;
-  };
-
-  // Reads s-expressions sequentially from a file. See notes in full
-  // declaration below.
-  class FileReader;
-
   virtual ~SExpression() { }
 
   // Appends a printed representation of this s-exp to str.
@@ -194,137 +149,14 @@ class SExpression {
     return Parse(str.c_str());
   }
 
+  typedef SExpressionConstIterator const_iterator;
+
   // Return iterators for beginning and end of list, provided this
   // SExpression is actually a list
   const_iterator Begin() const;
   const_iterator End() const;
 
  protected:
-  // CharacterIterator specifies an interface for one-way const
-  // iteration over a set of characters. It's used as a generic input
-  // source for SExpression::ParseSexp. We guarantee that the stream
-  // returned by the CharacterIterator contains zero or more non-\0
-  // characters, followed by a \0, and IsDone() is true only when the
-  // cursor is at \0.
-  //
-  // We provide, below, implementations to iterate through strings and
-  // files.
-  //
-  // Sample usage:
-  //
-  // for (CharacterIterator* c_iter = new ...; !c_iter->IsDone(); ++c_iter) {
-  //   char c = *c_iter;
-  //   ...
-  // }
-  class CharacterIterator {
-   public:
-    virtual ~CharacterIterator() { }
-
-    // Dereferences the iterator to a character.
-    virtual const char operator*() const = 0;
-    // Advances to the next character in the sequence.
-    virtual void operator++() = 0;
-    // Returns true if no more characters can be read. If IsDone(), ++
-    // has undefined effects. IsDone() should be synonymous with
-    // *char_iter == '\0'.
-    virtual bool IsDone() const = 0;
-
-   protected:
-    CharacterIterator() {}
-  };
-
-  // Simple class to support iterating over the characters of a c-str.
-  class StringCharacterIterator : public CharacterIterator {
-   public:
-    // Creates a new iterator over the given c-str.
-    explicit StringCharacterIterator(const char* str)
-        : CharacterIterator(),
-          cursor_(str) {}
-
-    virtual const char operator*()  const { return *cursor_; }
-    virtual void operator++() { ++cursor_; }
-    virtual bool IsDone() const { return cursor_ == '\0'; }
-
-   private:
-    // Points to the next character to read.
-    const char* cursor_;
-  };
-
-  // Abstract class that iterates over the characters read from a file
-  // object. Implementing classes can set the file object to take
-  // input from different sources.
-  class FileObjectCharacterIterator : public CharacterIterator {
-   public:
-    // Closes the file when we're done.
-    virtual ~FileObjectCharacterIterator() { fclose(file_); }
-
-    virtual const char operator*() const {
-      return (current_char_ == EOF) ? '\0' : current_char_;
-    }
-    virtual void operator++() { LoadNextChar(); }
-    virtual bool IsDone() const { return current_char_ == EOF; }
-
-   protected:
-    // Implementing classes should call Init() in their constructors
-    // and pass in the file object to be read.
-    explicit FileObjectCharacterIterator() : CharacterIterator() {}
-
-    void Init(FILE* file) {
-      file_ = file;
-      LoadNextChar();
-    }
-
-   private:
-    // Gets the next char from file, checking to see there was not a
-    // read error.
-    inline void LoadNextChar() {
-      current_char_ = fgetc(file_);
-      // Signal when there is a file error
-      CHECK(!(current_char_ == EOF && ferror(file_)));
-    }
-
-    // FILE object we're reading from
-    FILE* file_;
-    // Always contains the next character to return
-    int current_char_;
-  };
-
-  // Iterates over the characters of a file.
-  class FileCharacterIterator : public FileObjectCharacterIterator {
-   public:
-    // Creates a new iterator reading from the specified file.
-    explicit FileCharacterIterator(string filename)
-        : FileObjectCharacterIterator() {
-      FILE * file = fopen(filename.c_str(), "r");
-      CHECK(file != NULL);
-      Init(file);
-    }
-
-    virtual ~FileCharacterIterator() { }
-  };
-
-  // gunzips a file stream and reads the characters
-  class GzippedFileCharacterIterator : public FileObjectCharacterIterator {
-   public:
-    // Creates a new iterator reading from the specified file.
-    explicit GzippedFileCharacterIterator(string filename)
-        : FileObjectCharacterIterator() {
-      //Check file existance
-      FILE * file = fopen(filename.c_str(), "r");
-      CHECK(file != NULL);
-      fclose(file);
-
-      // Pipe in the output from "gunzip -c FILENAME".
-      string cmd;
-      cmd.append("gunzip -c ");
-      cmd.append(filename.c_str());
-
-      Init(popen(cmd.c_str(), "r"));
-    }
-
-    virtual ~GzippedFileCharacterIterator() { }
-  };
-
   // Default constructor. This is empty since there's no
   // initialization needed which is common to all SExpression objects.
   SExpression() { }
@@ -350,9 +182,14 @@ class SExpression {
   // s-exp is found.
   static SExpression* ParseSexp(CharacterIterator*);
 
+  // ParseFromCharInterator is required by FileReader template class.
+  static SExpression* ParseFromCharIterator(CharacterIterator* iter) {
+    return ParseSexp(iter);
+  }
+
  private:
   // FileReader needs access to SExpression's private parsing methods
-  friend class FileReader;
+  friend class FileReader<SExpression>;
 
   // Returns a new SExpression corresponding to the first s-exp of the
   // given type in the CharacterIterator. Assumes there is no leading
@@ -369,18 +206,6 @@ class SExpression {
   static SExpression* ParseSymbolInBars(CharacterIterator*);
   // Symbols not in bars, and numeric literals
   static SExpression* ParseUnquotedToken(CharacterIterator*);
-
-  // Moves *psexp so that it points to the first non-whitespace
-  // pointer in the string.
-  static inline void SkipWhitespace(const char** psexp) {
-    while (ascii_isspace(**psexp))
-      ++(*psexp);
-  }
-
-  static inline void SkipWhitespace(CharacterIterator* psexp) {
-    while (ascii_isspace(**psexp))
-      ++(*psexp);
-  }
 
   // Finds the string in *psexp bounded by the specified delimiter and
   // appends it to str. Advances the pointer to point to the first
@@ -405,47 +230,48 @@ class SExpression {
   DISALLOW_EVIL_CONSTRUCTORS(SExpression);
 };
 
-// FileReader reads the s-expressions from a file sequentially. Sample
-// usage:
+// SExpressionConstIterator supports one-way read-only iteration. If psexp
+// points to a list, the iter goes to each SExpression in the list,
+// in order.
 //
-// SExpression::FileReader f("/path/to/file");
-// while (!f.IsDone()) {
-//   SExpression* s = f.GetNext();
-//   ...
-// }
-class SExpression::FileReader {
+// Sample usage:
+//
+// for(SExpression::const_iterator iter = my_list->Begin();
+//     iter != my_list->End();
+//     ++iter)
+//   str.append(iter->Repr());
+class SExpressionConstIterator {
  public:
-  // Creates new reader reading from the specified file.
-  FileReader(string filename)
-      : pchar_iter(new FileCharacterIterator(filename)) {}
+  // Construct an iterator for the given list, provided this
+  // SExpression is actually a list
+  explicit SExpressionConstIterator(const SExpression* psexp);
+  // Construct an empty iterator (useful for generating sexp.End())
+  explicit SExpressionConstIterator() : next_(NULL), done_(true) {}
 
-  // Creates new reader reading from the specified file, optionally
-  // enabling a gunzip filter on the input.
-  FileReader(string filename, bool enable_gunzip) {
-    if (enable_gunzip)
-      pchar_iter = new GzippedFileCharacterIterator(filename);
-    else
-      pchar_iter = new FileCharacterIterator(filename);
+  // Dereference pointer to current SExpression
+  const SExpression& operator*() const;
+  const SExpression* operator->() const;
+
+  // Support == and != for use in for-loop constructs
+  inline bool operator==(const SExpressionConstIterator& iter) const {
+    return (done_ == iter.done_) && (next_ == iter.next_);
   }
 
-  // Deletes the underlying iterator when we're done.
-  ~FileReader() { delete pchar_iter; }
-
-  // Returns the next s-expression found in the file.
-  SExpression* GetNext() { return ParseSexp(pchar_iter); }
-
-  // Returns true if there is nothing more to read from the file.
-  bool IsDone() {
-    // Skip over whitespace so we can tell whether there are
-    // subsequent s-expressions, or just EOF.
-    SkipWhitespace(pchar_iter);
-    return pchar_iter->IsDone();
+  inline bool operator!=(const SExpressionConstIterator& iter) const {
+    return !(*this == iter);
   }
+
+  // Pre-increment advances to next element
+  void operator++();
 
  private:
-  // This is the underlying iterator used to get all the characters in
-  // the file.
-  CharacterIterator* pchar_iter;
+  // The iterator holds on to the SExpressionPair whose car is the
+  // next item, and advances to the cdr with each increment.
+
+  // Stores the next item we want to visit, if there are items left
+  const SExpressionPair* next_;
+  // True when there are no more items
+  bool done_;
 };
 
 // SExpressionNil represents nil or ().

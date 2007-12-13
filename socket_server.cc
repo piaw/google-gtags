@@ -16,6 +16,8 @@
 //
 // Author: stephenchen@google.com (Stephen Chen)
 
+#include "socket_server.h"
+
 #include <assert.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -27,14 +29,11 @@
 #include "tagsprofiler.h"
 #include "tagsoptionparser.h"
 #include "tagsrequesthandler.h"
-#include "socket_server.h"
-
-extern GtagsLogger* logger;
 
 DEFINE_INT32(tags_port, 2222, "port to tags server");
 
 // Maximum length of a request
-const int kMaxTagLen = 256;
+const int kMaxTagLen = 512;
 
 class SocketIO : public IOInterface {
  public:
@@ -44,15 +43,16 @@ class SocketIO : public IOInterface {
     connected_socket_ = accept(listen_socket,
                               (struct sockaddr *)&a_addr_,
                               &addrlen_);
+    source_ = inet_ntoa(a_addr_.sin_addr);
   }
 
-  ~SocketIO() {
+  virtual ~SocketIO() {
     if (connected_socket_ != -1) {
       close(connected_socket_);
     }
   }
 
-  bool Input(char ** input) {
+  virtual bool Input(char** input) {
     if (connected_socket_ == -1) {
       LOG(INFO) << "Connection error" << "\n";
       return false;
@@ -79,7 +79,7 @@ class SocketIO : public IOInterface {
     return false;
   }
 
-  bool Output(const char * output) {
+  virtual bool Output(const char * output) {
     const char* outbuf = output;
     int towrite = strlen(output);
 
@@ -94,13 +94,13 @@ class SocketIO : public IOInterface {
     return false;
   }
 
-  void Close() {
+  virtual void Close() {
     close(connected_socket_);
     connected_socket_ = -1;
   }
 
-  string Source() const {
-    return inet_ntoa(a_addr_.sin_addr);
+  virtual const char* Source() const {
+    return source_.c_str();
   }
 
  private:
@@ -108,6 +108,7 @@ class SocketIO : public IOInterface {
   socklen_t addrlen_;
   int connected_socket_;
   char buf_[kMaxTagLen];
+  string source_;
 };
 
 void SocketServer::Loop() {

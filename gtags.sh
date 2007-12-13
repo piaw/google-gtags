@@ -1,5 +1,5 @@
 #!/bin/bash
-# Copyright 2004 Google Inc.
+# Copyright 2004-2007 Google Inc.
 # All Rights Reserved.
 #
 # This program is free software; you can redistribute it and/or
@@ -24,7 +24,7 @@
 # Example usage:                   gtags.sh -w -r mapreduce Output
 # which is equivalent to:          gtags.sh --color ^Output$ | grep \ mapreduce/
 #
-# For invocations and definitions: gtags.sh -i -w -r mapreduce Output
+# For invocations:                 gtags.sh -i -w -r mapreduce Output
 # Emit vi cmds for cut-and-paste:  gtags.sh -v -w -r mapreduce Output
 
 
@@ -33,10 +33,12 @@ cat <<EOF
 Command-line interface to gtags.
 
 Usage: gtags.sh [flags] tag ...
+  Shows lines containing a definition for tag.
+
 flags:
-  -L|--lang c++|java|python|szl	# language of source files to look in
+  -L|--lang c++|java|python	# language of source files to look in
   -w|--word			# match whole word only (same as ^tag$)
-  -i|--invocations		# match invocations *and* definitions of tag
+  -i|--invocations		# show invocations of tag, not definitions
   -r|--restrict <dir>	        # restrict matches to <dir>/
   --color | --nocolor		# override "use ansi colors if isatty(stdout)"
   --basedir <prefix>            # dir to prefix
@@ -51,22 +53,31 @@ flags:
 Example usage:                   gtags.sh -w -r mapreduce Output
 which is equivalent to:          gtags.sh --color ^Output$ | grep \ mapreduce/
 
-For invocations and definitions: gtags.sh -i -w -r mapreduce Output
+For invocations:                 gtags.sh -i -w -r mapreduce Output
 Emit vi cmds for cut-and-paste:  gtags.sh -v -w -r mapreduce Output
 
 Default values for most options can be set by defining environnent variables
 starting with \`\`GTAGS_''.
+  The default corpus can be set by defining \$GTAGS_CORPUS.
   The default language can be set by defining \$GTAGS_LANG.
   The default style can be set by definiting \$GTAGS_STYLE.
   Match whole words only by default if \$GTAGS_WORD is 1.
   Match invocations and definitions by default if \$GTAGS_INVOCATIONS is 1.
   By default restrict matches to $GTAGS_RESTRICT, if set.
   Default basedir can be overridden by setting \$GTAGS_BASEDIR.
+  Default proxy can be overridden by setting \$GTAGS_PROXY.
   It is possible to disable colors by default by setting \$GTAGS_COLOR to 0.
 EOF
 }
 
-# Chcek for sanity of default lang. If invalid, just ignore it
+# Check for sanity of default corpus. If invalid, just ignore it
+if [ ! "$GTAGS_CORPUS" = "google3" -a \
+       "$GTAGS_CORPUS" = "googleclient_wireless" ]; then
+   unset $GTAGS_CORPUS;
+fi;
+corpus=${GTAGS_CORPUS:-"google3"} # Set default corpus.  default: "google3"
+
+# Check for sanity of default lang. If invalid, just ignore it
 if [ ! "$GTAGS_LANG" = "c++" -a \
      ! "$GTAGS_LANG" = "java" -a \
      ! "$GTAGS_LANG" = "python" ]; then
@@ -122,12 +133,14 @@ fi;
 
 opts=`getopt -o L:wiplvsr: \
       --long word,invocations,plain,less,vi,\
-lang:,restrict:,basedir:,color,nocolor,status \
+corpus:,lang:,restrict:,basedir:,color,nocolor,proxy:,status \
       -n 'gtags.sh' -- "$@"`
 
 eval set -- "$opts"
 while true ; do
   case "$1" in
+    --corpus)
+      corpus=$2; shift 2 ;;
     -L|--lang)
       # Validate the argument of --lang
       if [ ! "$2" = "c++" -a \
@@ -137,6 +150,7 @@ while true ; do
         exit 1
       fi;
       lang=$2; shift 2 ;;
+    --proxy)		proxy=$2; shift 2 ;;
     -w|--word)		word=1; shift ;;
     -i|--invocations)	invocations=1; shift ;;
     # -p, -l, -v, and -s are mutually exclusive.
@@ -160,11 +174,17 @@ while true ; do
   esac
 done
 
+set_proxy=""
+if [ "$proxy" != "" ] ; then
+    set_proxy="gtags.connection_manager.proxy='"$proxy"'"
+fi
+
 if [ "$*" = "" ]; then
     if [ "$checkstatus" = "1" ]; then
 	PYTHONPATH=$(dirname $0):$PYTHONPATH python -c "
 import gtags
 
+$set_proxy
 result = gtags.check_server_status('"$lang"', $invocations, 'shell')
 print 'Server status: ' + result"
 	exit 0
@@ -236,7 +256,12 @@ fi
 
 PYTHONPATH=$(dirname $0):$PYTHONPATH python -c "
 import gtags
-results = gtags."$call"('"$lang"', '"$tag"', "$invocations", 0, 'shell')
+$set_proxy
+try:
+  results = gtags."$call"('"$lang"', '"$tag"', "$invocations", 0, 'shell')
+except gtags.ErrorMessageFromServer, msg:
+  print $red + str(msg) + $black
+  sys.exit(-1)
 for result in results:
   if result.filename_[0:2] == './':      # strip ./ which shows up in -i mode
     result.filename_ = result.filename_[2:]

@@ -1,0 +1,7 @@
+(tags-format-version 2)
+(tags-comment "")
+(timestamp 1155246407)
+(tags-corpus-name "cpp")
+(features (include-files))
+(deleted "tools/tags/file5.cc")
+(deleted "tools/tags/file6.cc")
